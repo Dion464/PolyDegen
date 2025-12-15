@@ -120,15 +120,27 @@ const TrendingSkeleton = memo(() => (
 const LazyMarketImage = memo(({ src, alt, width = 48, height = 48 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState(src);
+
+  // Reset states when src changes
+  React.useEffect(() => {
+    if (src !== currentSrc) {
+      setCurrentSrc(src);
+      setIsLoaded(false);
+      setHasError(false);
+    }
+  }, [src, currentSrc]);
 
   // Optimize Unsplash URLs for smaller sizes
   const optimizeSrc = (url) => {
-    if (!url) return url;
+    if (!url) return null;
     if (url.includes('source.unsplash.com')) {
       return url.replace(/\/\d+x\d+\//, '/100x100/').replace(/\?.*$/, '?w=100&h=100&fit=crop');
     }
     return url;
   };
+
+  const optimizedSrc = optimizeSrc(currentSrc);
 
   return (
     <div 
@@ -139,21 +151,21 @@ const LazyMarketImage = memo(({ src, alt, width = 48, height = 48 }) => {
         backgroundColor: '#1a1a1a'
       }}
     >
-      {!isLoaded && !hasError && (
+      {(!isLoaded || !optimizedSrc) && !hasError && (
         <div 
           className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-800" 
           style={{ animation: 'pulse 1.5s ease-in-out infinite' }}
         />
       )}
-      {!hasError && (
+      {optimizedSrc && !hasError && (
         <img
-          src={optimizeSrc(src)}
+          key={optimizedSrc}
+          src={optimizedSrc}
           alt={alt}
           width={width}
           height={height}
-          loading="lazy"
+          loading="eager"
           decoding="async"
-          fetchpriority="low"
           onLoad={() => setIsLoaded(true)}
           onError={() => setHasError(true)}
           style={{ 
@@ -206,7 +218,6 @@ const HomeWormStyle = () => {
   const fetchMarkets = async () => {
     try {
       setLoading(true);
-      // Reset for fresh fetch but keep any existing data visible
       
       // Create a direct provider if wallet is not connected
       let contractToUse = contracts?.predictionMarket;
@@ -224,22 +235,25 @@ const HomeWormStyle = () => {
         );
       }
 
-      const activeMarkets = await contractToUse.getActiveMarkets();
-      
-      // Fetch images in parallel (don't block market rendering)
+      // Fetch images FIRST so they're available when markets render
       let persistedImages = {};
-      const imagePromise = fetch(`${API_BASE}/api/market-images`)
-        .then(res => res.ok ? res.json() : { images: [] })
-        .then(imageData => {
+      try {
+        const imageResponse = await fetch(`${API_BASE}/api/market-images`);
+        if (imageResponse.ok) {
+          const imageData = await imageResponse.json();
           const imagesArray = Array.isArray(imageData.images) ? imageData.images : [];
           imagesArray.forEach((img) => {
             if (img.marketId && img.imageUrl) {
               persistedImages[img.marketId.toString()] = img.imageUrl;
             }
           });
-        })
-        .catch(() => console.warn('Unable to load market images from API'));
+        }
+      } catch (imgErr) {
+        console.warn('Unable to load market images from API:', imgErr);
+      }
 
+      const activeMarkets = await contractToUse.getActiveMarkets();
+      
       // Stream markets progressively - first come, first serve
       const allMarketsData = [];
       
@@ -254,6 +268,7 @@ const HomeWormStyle = () => {
           const marketIdStr = marketId.toString();
           
           // Create partial market data immediately (basic info first)
+          // Images are already loaded so include them right away
           const partialMarket = {
             id: marketIdStr,
             question: market.question,
@@ -323,17 +338,6 @@ const HomeWormStyle = () => {
           console.error(`Error fetching market ${marketId}:`, err);
         }
       }
-
-      // Wait for images to load and update markets with images
-      await imagePromise;
-      setMarkets(prev => prev.map(m => ({
-        ...m,
-        imageUrl: persistedImages[m.id] || m.imageUrl
-      })));
-      setTrendingMarkets(prev => prev.map(m => ({
-        ...m,
-        imageUrl: persistedImages[m.id] || m.imageUrl
-      })));
       
     } catch (error) {
       console.error('Error fetching markets:', error);
@@ -834,10 +838,10 @@ const HomeWormStyle = () => {
           </div>
         </div>
 
-        {/* Markets Grid */}
-        {loading ? (
+        {/* Markets Grid - Progressive loading: show cards as they arrive */}
+        {loading && sortedMarkets.length === 0 ? (
           <MarketsGridSkeleton />
-        ) : sortedMarkets.length === 0 ? (
+        ) : sortedMarkets.length === 0 && !loading ? (
           <div className="text-center py-20">
             <p className="text-gray-400 text-lg font-space-grotesk">
               {searchQuery.trim() ? `No markets found for "${searchQuery}"` : 'No markets found'}

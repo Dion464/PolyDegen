@@ -20,33 +20,45 @@ const SkeletonText = memo(({ width = '100%', height = '20px', style = {} }) => (
 const LazyImage = memo(({ src, alt, width = 48, height = 54 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState(src);
+
+  // Reset states when src changes
+  React.useEffect(() => {
+    if (src !== currentSrc) {
+      setCurrentSrc(src);
+      setIsLoaded(false);
+      setHasError(false);
+    }
+  }, [src, currentSrc]);
 
   // Optimize Unsplash URLs
   const optimizeSrc = (url) => {
-    if (!url) return url;
+    if (!url) return null;
     if (url.includes('source.unsplash.com')) {
       return url.replace(/\/\d+x\d+\//, '/100x100/').replace(/\?.*$/, '?w=100&h=100&fit=crop');
     }
     return url;
   };
 
+  const optimizedSrc = optimizeSrc(currentSrc);
+
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: '#1a1a1a' }}>
-      {!isLoaded && !hasError && (
+      {(!isLoaded || !optimizedSrc) && !hasError && (
         <div 
           className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-800"
           style={{ animation: 'pulse 1.5s ease-in-out infinite' }}
         />
       )}
-      {!hasError && (
+      {optimizedSrc && !hasError && (
         <img
-          src={optimizeSrc(src)}
+          key={optimizedSrc}
+          src={optimizedSrc}
           alt={alt}
           width={width}
           height={height}
-          loading="lazy"
+          loading="eager"
           decoding="async"
-          fetchpriority="low"
           onLoad={() => setIsLoaded(true)}
           onError={() => setHasError(true)}
           style={{
@@ -153,7 +165,12 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
   const getMarketImage = () => {
     const marketId = market.id || '0';
     
-    // First, check if there's a stored image URL in localStorage
+    // Priority 1: If market has an imageUrl prop from API, use it
+    if (market.imageUrl) {
+      return market.imageUrl;
+    }
+    
+    // Priority 2: Check localStorage cache
     try {
       const marketImages = JSON.parse(localStorage.getItem('marketImages') || '{}');
       if (marketImages[marketId]) {
@@ -163,12 +180,7 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
       console.log('Error reading market images from localStorage');
     }
     
-    // If market has an imageUrl prop, use it
-    if (market.imageUrl) {
-      return market.imageUrl;
-    }
-    
-    // Otherwise, generate a placeholder based on category
+    // Priority 3: Generate a placeholder based on category
     const category = market.category || 'General';
     
     // Use Unsplash API for category-based images
@@ -179,6 +191,9 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
       'Entertainment': 'entertainment,showbiz,celebrity',
       'Economics': 'economics,money,finance',
       'Science': 'science,research,laboratory',
+      'Crypto': 'cryptocurrency,bitcoin,blockchain',
+      'Tech': 'technology,innovation,digital',
+      'WTF': 'abstract,surreal,unusual',
       'General': 'abstract,pattern,design'
     };
     
