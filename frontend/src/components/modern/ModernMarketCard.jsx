@@ -2,21 +2,28 @@ import React, { useState, memo } from 'react';
 import { useHistory } from 'react-router-dom';
 import '../../pages/market/MarketDetailGlass.css';
 
-// Inline skeleton for selective loading
+// GPU-accelerated shimmer style
+const skeletonShimmerStyle = {
+  background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%)',
+  backgroundSize: '200% 100%',
+  animation: 'shimmer 1.5s infinite',
+  willChange: 'background-position',
+};
+
+// Inline skeleton for selective loading - GPU optimized
 const SkeletonText = memo(({ width = '100%', height = '20px', style = {} }) => (
   <div 
-    className="animate-pulse"
     style={{
       width,
       height,
-      background: 'rgba(255,255,255,0.1)',
       borderRadius: '6px',
+      ...skeletonShimmerStyle,
       ...style
     }}
   />
 ));
 
-// Lazy image component with blur placeholder - optimized for CLS
+// Lazy image component with blur placeholder - GPU optimized
 const LazyImage = memo(({ src, alt, width = 48, height = 54 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -46,8 +53,11 @@ const LazyImage = memo(({ src, alt, width = 48, height = 54 }) => {
     <div style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: '#1a1a1a' }}>
       {(!isLoaded || !optimizedSrc) && !hasError && (
         <div 
-          className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-800"
-          style={{ animation: 'pulse 1.5s ease-in-out infinite' }}
+          style={{ 
+            position: 'absolute',
+            inset: 0,
+            ...skeletonShimmerStyle
+          }}
         />
       )}
       {optimizedSrc && !hasError && (
@@ -69,7 +79,8 @@ const LazyImage = memo(({ src, alt, width = 48, height = 54 }) => {
             transition: 'opacity 0.2s ease',
             position: 'absolute',
             top: 0,
-            left: 0
+            left: 0,
+            willChange: 'opacity'
           }}
         />
       )}
@@ -352,12 +363,14 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
           >
             {isPriceLoading || yesPrice == null ? (
               <div 
-                className="animate-pulse"
                 style={{
                   width: '50%',
                   height: '100%',
-                  background: 'rgba(247, 208, 34, 0.3)',
+                  background: 'linear-gradient(90deg, rgba(247, 208, 34, 0.2) 25%, rgba(247, 208, 34, 0.4) 50%, rgba(247, 208, 34, 0.2) 75%)',
+                  backgroundSize: '200% 100%',
+                  animation: 'shimmer 1.5s infinite',
                   borderRadius: '3px',
+                  willChange: 'background-position',
                 }}
               />
             ) : (

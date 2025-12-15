@@ -10,10 +10,17 @@ import HowItWorksModal from '../../components/modal/HowItWorksModal';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, RPC_URL } from '../../contracts/eth-config';
 import '../market/MarketDetailGlass.css';
 
-// Skeleton market card for loading state
+// GPU-accelerated skeleton shimmer style (uses transform/opacity for compositing)
+const skeletonShimmerStyle = {
+  background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%)',
+  backgroundSize: '200% 100%',
+  animation: 'shimmer 1.5s infinite',
+  willChange: 'background-position',
+};
+
+// Skeleton market card for loading state - GPU optimized
 const MarketCardSkeleton = memo(() => (
   <div 
-    className="animate-pulse"
     style={{
       width: '100%',
       minHeight: '235px',
@@ -26,21 +33,21 @@ const MarketCardSkeleton = memo(() => (
   >
     {/* Top row - avatar + title */}
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', marginBottom: '20px' }}>
-      <div style={{ width: '48px', height: '54px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)' }} />
+      <div style={{ width: '48px', height: '54px', borderRadius: '8px', ...skeletonShimmerStyle }} />
       <div style={{ flex: 1 }}>
-        <div style={{ height: '20px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px', marginBottom: '8px', width: '80%' }} />
-        <div style={{ height: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', width: '60%' }} />
+        <div style={{ height: '20px', borderRadius: '6px', marginBottom: '8px', width: '80%', ...skeletonShimmerStyle }} />
+        <div style={{ height: '16px', borderRadius: '6px', width: '60%', ...skeletonShimmerStyle }} />
       </div>
-      <div style={{ width: '60px', height: '16px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px' }} />
+      <div style={{ width: '60px', height: '16px', borderRadius: '6px', ...skeletonShimmerStyle }} />
     </div>
     
     {/* Middle - volume + percentage */}
     <div style={{ marginBottom: '14px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-        <div style={{ width: '60px', height: '14px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px' }} />
-        <div style={{ width: '80px', height: '20px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px' }} />
+        <div style={{ width: '60px', height: '14px', borderRadius: '4px', ...skeletonShimmerStyle }} />
+        <div style={{ width: '80px', height: '20px', borderRadius: '4px', ...skeletonShimmerStyle }} />
       </div>
-      <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px' }} />
+      <div style={{ height: '6px', borderRadius: '3px', ...skeletonShimmerStyle }} />
     </div>
     
     {/* Bottom - buttons */}
@@ -60,10 +67,9 @@ const MarketsGridSkeleton = memo(() => (
   </div>
 ));
 
-// Trending skeleton
+// Trending skeleton - GPU optimized
 const TrendingCardSkeleton = memo(() => (
   <div 
-    className="animate-pulse"
     style={{
       background: 'transparent',
       backdropFilter: 'blur(26px)',
@@ -74,18 +80,18 @@ const TrendingCardSkeleton = memo(() => (
     }}
   >
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '20px' }}>
-      <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)' }} />
+      <div style={{ width: '48px', height: '48px', borderRadius: '8px', ...skeletonShimmerStyle }} />
       <div style={{ flex: 1 }}>
-        <div style={{ height: '20px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px', marginBottom: '8px', width: '85%' }} />
-        <div style={{ height: '14px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', width: '50%' }} />
+        <div style={{ height: '20px', borderRadius: '6px', marginBottom: '8px', width: '85%', ...skeletonShimmerStyle }} />
+        <div style={{ height: '14px', borderRadius: '6px', width: '50%', ...skeletonShimmerStyle }} />
       </div>
     </div>
     <div style={{ marginBottom: '14px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-        <div style={{ width: '50px', height: '14px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px' }} />
-        <div style={{ width: '70px', height: '18px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px' }} />
+        <div style={{ width: '50px', height: '14px', borderRadius: '4px', ...skeletonShimmerStyle }} />
+        <div style={{ width: '70px', height: '18px', borderRadius: '4px', ...skeletonShimmerStyle }} />
       </div>
-      <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px' }} />
+      <div style={{ height: '6px', borderRadius: '3px', ...skeletonShimmerStyle }} />
     </div>
     <div style={{ display: 'flex', gap: '10px' }}>
       <div style={{ flex: 1, height: '48px', background: 'rgba(67, 199, 115, 0.08)', borderRadius: '8px' }} />
@@ -94,15 +100,14 @@ const TrendingCardSkeleton = memo(() => (
   </div>
 ));
 
-// Inline skeleton component for selective loading
+// Inline skeleton component for selective loading - GPU optimized
 const SkeletonText = memo(({ width = '100%', height = '20px', style = {} }) => (
   <div 
-    className="animate-pulse"
     style={{
       width,
       height,
-      background: 'rgba(255,255,255,0.1)',
       borderRadius: '6px',
+      ...skeletonShimmerStyle,
       ...style
     }}
   />
@@ -116,7 +121,7 @@ const TrendingSkeleton = memo(() => (
   </div>
 ));
 
-// Lazy image component for market cards - optimized for CLS
+// Lazy image component for market cards - optimized for CLS and GPU compositing
 const LazyMarketImage = memo(({ src, alt, width = 48, height = 48 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -153,8 +158,11 @@ const LazyMarketImage = memo(({ src, alt, width = 48, height = 48 }) => {
     >
       {(!isLoaded || !optimizedSrc) && !hasError && (
         <div 
-          className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-800" 
-          style={{ animation: 'pulse 1.5s ease-in-out infinite' }}
+          style={{ 
+            position: 'absolute',
+            inset: 0,
+            ...skeletonShimmerStyle
+          }}
         />
       )}
       {optimizedSrc && !hasError && (
@@ -176,7 +184,8 @@ const LazyMarketImage = memo(({ src, alt, width = 48, height = 48 }) => {
             transition: 'opacity 0.2s ease',
             position: 'absolute',
             top: 0,
-            left: 0
+            left: 0,
+            willChange: 'opacity'
           }}
         />
       )}
@@ -254,90 +263,110 @@ const HomeWormStyle = () => {
 
       const activeMarkets = await contractToUse.getActiveMarkets();
       
-      // Stream markets progressively - first come, first serve
+      // Batch size for progressive loading (reduces re-renders)
+      const BATCH_SIZE = 3;
       const allMarketsData = [];
       
-      // Process markets one by one and update state progressively
-      for (const marketId of activeMarkets) {
-        try {
-          const market = await contractToUse.getMarket(marketId);
-          
-          // Skip inactive/resolved markets early
-          if (!market.active || market.resolved) continue;
-          
-          const marketIdStr = marketId.toString();
-          
-          // Create partial market data immediately (basic info first)
-          // Images are already loaded so include them right away
-          const partialMarket = {
-            id: marketIdStr,
-            question: market.question,
-            category: market.category || 'General',
-            yesPrice: null, // Will be filled in
-            noPrice: null,
-            totalYesShares: parseFloat(ethers.utils.formatEther(market.totalYesShares)),
-            totalNoShares: parseFloat(ethers.utils.formatEther(market.totalNoShares)),
-            volume: null, // Will be computed
-            creator: market.creator,
-            resolved: market.resolved,
-            active: market.active,
-            createdAt: market.createdAt ? new Date(market.createdAt.toNumber() * 1000) : new Date(),
-            endTime: market.endTime ? new Date(market.endTime.toNumber() * 1000).toISOString() : null,
-            resolutionTime: market.resolutionTime ? new Date(market.resolutionTime.toNumber() * 1000).toISOString() : null,
-            imageUrl: persistedImages[marketIdStr] || (market.imageUrl ?? null),
-            _priceLoading: true, // Flag for skeleton state
-          };
-          
-          // Calculate volume from shares
-          partialMarket.volume = partialMarket.totalYesShares + partialMarket.totalNoShares;
-          
-          // Add to allMarketsData and update state immediately
-          allMarketsData.push(partialMarket);
-          
-          // Update markets state progressively
-          setMarkets([...allMarketsData]);
-          
-          // Update trending (top 3 by volume) progressively
-          const sortedForTrending = [...allMarketsData].sort((a, b) => b.volume - a.volume);
-          setTrendingMarkets(sortedForTrending.slice(0, 3));
-          
-          // Fetch prices asynchronously and update when ready
-          contractToUse.getCurrentPrice(marketId, true)
-            .then(async (yesPriceBps) => {
-              const noPriceBps = await contractToUse.getCurrentPrice(marketId, false);
-              const yesPrice = Math.round(parseFloat(yesPriceBps.toString()) / 100);
-              const noPrice = Math.round(parseFloat(noPriceBps.toString()) / 100);
+      // Helper to yield to main thread between batches
+      const yieldToMain = () => new Promise(resolve => setTimeout(resolve, 0));
+      
+      // Process markets in batches to reduce main thread blocking
+      for (let i = 0; i < activeMarkets.length; i += BATCH_SIZE) {
+        const batch = activeMarkets.slice(i, i + BATCH_SIZE);
+        
+        // Fetch batch in parallel
+        const batchResults = await Promise.all(
+          batch.map(async (marketId) => {
+            try {
+              const market = await contractToUse.getMarket(marketId);
               
-              // Update the market with price data
-              setMarkets(prev => prev.map(m => 
-                m.id === marketIdStr 
-                  ? { ...m, yesPrice, noPrice, _priceLoading: false }
-                  : m
-              ));
-              setTrendingMarkets(prev => prev.map(m => 
-                m.id === marketIdStr 
-                  ? { ...m, yesPrice, noPrice, _priceLoading: false }
-                  : m
-              ));
-            })
-            .catch(() => {
-              // Set defaults if price fetch fails
-              setMarkets(prev => prev.map(m => 
-                m.id === marketIdStr 
-                  ? { ...m, yesPrice: 50, noPrice: 50, _priceLoading: false }
-                  : m
-              ));
-              setTrendingMarkets(prev => prev.map(m => 
-                m.id === marketIdStr 
-                  ? { ...m, yesPrice: 50, noPrice: 50, _priceLoading: false }
-                  : m
-              ));
-            });
+              // Skip inactive/resolved markets
+              if (!market.active || market.resolved) return null;
+              
+              const marketIdStr = marketId.toString();
+              const totalYesShares = parseFloat(ethers.utils.formatEther(market.totalYesShares));
+              const totalNoShares = parseFloat(ethers.utils.formatEther(market.totalNoShares));
+              
+              return {
+                id: marketIdStr,
+                question: market.question,
+                category: market.category || 'General',
+                yesPrice: null,
+                noPrice: null,
+                totalYesShares,
+                totalNoShares,
+                volume: totalYesShares + totalNoShares,
+                creator: market.creator,
+                resolved: market.resolved,
+                active: market.active,
+                createdAt: market.createdAt ? new Date(market.createdAt.toNumber() * 1000) : new Date(),
+                endTime: market.endTime ? new Date(market.endTime.toNumber() * 1000).toISOString() : null,
+                resolutionTime: market.resolutionTime ? new Date(market.resolutionTime.toNumber() * 1000).toISOString() : null,
+                imageUrl: persistedImages[marketIdStr] || (market.imageUrl ?? null),
+                _priceLoading: true,
+              };
+            } catch (err) {
+              console.error(`Error fetching market ${marketId}:`, err);
+              return null;
+            }
+          })
+        );
+        
+        // Filter valid results and add to collection
+        const validResults = batchResults.filter(Boolean);
+        allMarketsData.push(...validResults);
+        
+        // Batch state update (single re-render per batch)
+        if (validResults.length > 0) {
+          const currentData = [...allMarketsData];
+          setMarkets(currentData);
           
-        } catch (err) {
-          console.error(`Error fetching market ${marketId}:`, err);
+          // Update trending
+          const sortedForTrending = [...currentData].sort((a, b) => b.volume - a.volume);
+          setTrendingMarkets(sortedForTrending.slice(0, 3));
+        }
+        
+        // Yield to main thread between batches
+        if (i + BATCH_SIZE < activeMarkets.length) {
+          await yieldToMain();
         }
       }
+      
+      // Fetch all prices in parallel (non-blocking)
+      const pricePromises = allMarketsData.map(async (market) => {
+        try {
+          const [yesPriceBps, noPriceBps] = await Promise.all([
+            contractToUse.getCurrentPrice(market.id, true),
+            contractToUse.getCurrentPrice(market.id, false)
+          ]);
+          return {
+            id: market.id,
+            yesPrice: Math.round(parseFloat(yesPriceBps.toString()) / 100),
+            noPrice: Math.round(parseFloat(noPriceBps.toString()) / 100),
+          };
+        } catch {
+          return { id: market.id, yesPrice: 50, noPrice: 50 };
+        }
+      });
+      
+      // Update prices as they resolve (batched)
+      Promise.all(pricePromises).then((prices) => {
+        const priceMap = Object.fromEntries(prices.map(p => [p.id, p]));
+        
+        setMarkets(prev => prev.map(m => ({
+          ...m,
+          yesPrice: priceMap[m.id]?.yesPrice ?? m.yesPrice ?? 50,
+          noPrice: priceMap[m.id]?.noPrice ?? m.noPrice ?? 50,
+          _priceLoading: false,
+        })));
+        
+        setTrendingMarkets(prev => prev.map(m => ({
+          ...m,
+          yesPrice: priceMap[m.id]?.yesPrice ?? m.yesPrice ?? 50,
+          noPrice: priceMap[m.id]?.noPrice ?? m.noPrice ?? 50,
+          _priceLoading: false,
+        })));
+      });
       
     } catch (error) {
       console.error('Error fetching markets:', error);
@@ -679,12 +708,14 @@ const HomeWormStyle = () => {
                       >
                         {market._priceLoading || market.yesPrice == null ? (
                           <div 
-                            className="animate-pulse"
                             style={{
                               width: '50%',
                               height: '100%',
-                              background: 'rgba(247, 208, 34, 0.3)',
+                              background: 'linear-gradient(90deg, rgba(247, 208, 34, 0.2) 25%, rgba(247, 208, 34, 0.4) 50%, rgba(247, 208, 34, 0.2) 75%)',
+                              backgroundSize: '200% 100%',
+                              animation: 'shimmer 1.5s infinite',
                               borderRadius: '3px',
+                              willChange: 'background-position',
                             }}
                           />
                         ) : (
