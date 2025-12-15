@@ -1,7 +1,38 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, memo } from 'react';
 import { useHistory } from 'react-router-dom';
 import WormStyleNavbar from '../../components/modern/WormStyleNavbar';
 import { centsToTCENT } from '../../utils/priceFormatter';
+
+// Skeleton loading row component
+const ActivityRowSkeleton = memo(() => (
+  <div className="flex items-center border-b border-[#272727] animate-pulse">
+    <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 px-3 sm:px-4 py-3">
+      {/* Avatar skeleton */}
+      <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg bg-white/10 flex-shrink-0" />
+      
+      {/* Content skeleton */}
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="h-3 sm:h-4 bg-white/10 rounded w-3/4" />
+        <div className="h-2.5 sm:h-3 bg-white/5 rounded w-1/2" />
+      </div>
+    </div>
+    
+    {/* Time skeleton */}
+    <div className="flex items-center gap-2 px-2 sm:px-4 py-3 flex-shrink-0">
+      <div className="h-3 w-10 bg-white/10 rounded" />
+      <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-white/10" />
+    </div>
+  </div>
+));
+
+// Skeleton loading component for Activity page
+const ActivitySkeleton = memo(() => (
+  <div className="rounded-[18px] bg-[#050505] shadow-[0_22px_60px_rgba(0,0,0,0.75)]">
+    {[...Array(8)].map((_, i) => (
+      <ActivityRowSkeleton key={i} />
+    ))}
+  </div>
+));
 
 // Helper function to format timestamp as relative time
 const formatTimeAgo = (timestamp) => {
@@ -273,29 +304,28 @@ const Activity = () => {
           </div>
 
           {/* Activity list – full-width rows with subtle dividers, no outer card */}
-          <div className="rounded-[18px] bg-[#050505] shadow-[0_22px_60px_rgba(0,0,0,0.75)]">
-            {loading && (
-              <div className="px-4 py-6 text-sm text-[#BABABA]">
-                Loading recent activity...
-              </div>
-            )}
-            {!loading && filteredActivity.length === 0 && (
+          {loading ? (
+            <ActivitySkeleton />
+          ) : filteredActivity.length === 0 ? (
+            <div className="rounded-[18px] bg-[#050505] shadow-[0_22px_60px_rgba(0,0,0,0.75)]">
               <div className="px-4 py-6 text-sm text-[#BABABA]">
                 {activity.length === 0 
                   ? 'No recent activity yet. Trade a market to see it here.'
                   : `No ${filter === 'all' ? '' : filter} activity found.`
                 }
               </div>
-            )}
-            {!loading &&
-              filteredActivity.map((item) => (
+            </div>
+          ) : (
+            <div className="rounded-[18px] bg-[#050505] shadow-[0_22px_60px_rgba(0,0,0,0.75)]">
+              {filteredActivity.map((item) => (
                 <ActivityRow 
                   key={item.id} 
                   item={item} 
                   onClick={() => handleActivityClick(item)}
                 />
               ))}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

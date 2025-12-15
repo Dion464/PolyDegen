@@ -1,8 +1,64 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { useParams, useHistory } from 'react-router-dom';
 import { useWeb3 } from '../../hooks/useWeb3';
 import { getCurrencySymbol } from '../../utils/currency';
 import { ethers } from 'ethers';
+
+// Skeleton loading components
+const SkeletonBlock = memo(({ className = '', style = {} }) => (
+  <div 
+    className={`bg-white/10 animate-pulse rounded ${className}`}
+    style={{ minHeight: '16px', ...style }}
+  />
+));
+
+const UserProfileSkeleton = memo(() => (
+  <div className="min-h-screen bg-[#0E0E0E]">
+    <div className="max-w-7xl mx-auto px-4 py-8 pt-20">
+      {/* Header skeleton */}
+      <div className="bg-[#1a1a1a] rounded-2xl p-6 mb-6 animate-pulse">
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-white/10" />
+          <div className="flex-1">
+            <div className="h-6 bg-white/10 rounded w-48 mb-2" />
+            <div className="h-4 bg-white/5 rounded w-32" />
+          </div>
+        </div>
+      </div>
+      
+      {/* Stats cards skeleton */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="bg-[#1a1a1a] rounded-xl p-4 animate-pulse">
+            <div className="h-3 bg-white/10 rounded w-20 mb-2" />
+            <div className="h-6 bg-white/10 rounded w-16" />
+          </div>
+        ))}
+      </div>
+      
+      {/* Tabs skeleton */}
+      <div className="flex gap-4 mb-6">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="h-10 w-24 bg-white/10 rounded-full animate-pulse" />
+        ))}
+      </div>
+      
+      {/* Content skeleton */}
+      <div className="bg-[#1a1a1a] rounded-2xl p-6 space-y-4">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="flex items-center gap-4 animate-pulse">
+            <div className="w-12 h-12 rounded-lg bg-white/10" />
+            <div className="flex-1">
+              <div className="h-4 bg-white/10 rounded w-3/4 mb-2" />
+              <div className="h-3 bg-white/5 rounded w-1/2" />
+            </div>
+            <div className="h-6 w-20 bg-white/10 rounded" />
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+));
 
 const UserProfile = () => {
   const { address } = useParams();
@@ -374,15 +430,7 @@ const UserProfile = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading profile from blockchain...</p>
-          <p className="text-sm text-gray-500 mt-2">This may take a moment</p>
-        </div>
-      </div>
-    );
+    return <UserProfileSkeleton />;
   }
 
   if (error || !profileData) {

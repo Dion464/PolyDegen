@@ -10,6 +10,98 @@ import HowItWorksModal from '../../components/modal/HowItWorksModal';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, RPC_URL } from '../../contracts/eth-config';
 import '../market/MarketDetailGlass.css';
 
+// Skeleton market card for loading state
+const MarketCardSkeleton = memo(() => (
+  <div 
+    className="animate-pulse"
+    style={{
+      width: '100%',
+      minHeight: '235px',
+      background: 'linear-gradient(135deg, rgba(18,18,18,0.68), rgba(40,40,40,0.52))',
+      backdropFilter: 'blur(24px)',
+      borderRadius: '14px',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      padding: '22px 20px',
+    }}
+  >
+    {/* Top row - avatar + title */}
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', marginBottom: '20px' }}>
+      <div style={{ width: '48px', height: '54px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)' }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ height: '20px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px', marginBottom: '8px', width: '80%' }} />
+        <div style={{ height: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', width: '60%' }} />
+      </div>
+      <div style={{ width: '60px', height: '16px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px' }} />
+    </div>
+    
+    {/* Middle - volume + percentage */}
+    <div style={{ marginBottom: '14px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <div style={{ width: '60px', height: '14px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px' }} />
+        <div style={{ width: '80px', height: '20px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px' }} />
+      </div>
+      <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px' }} />
+    </div>
+    
+    {/* Bottom - buttons */}
+    <div style={{ display: 'flex', gap: '10px', marginTop: 'auto' }}>
+      <div style={{ flex: 1, height: '50px', background: 'rgba(67, 199, 115, 0.1)', borderRadius: '8px' }} />
+      <div style={{ flex: 1, height: '50px', background: 'rgba(225, 55, 55, 0.1)', borderRadius: '8px' }} />
+    </div>
+  </div>
+));
+
+// Skeleton grid for loading state
+const MarketsGridSkeleton = memo(() => (
+  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+    {[...Array(6)].map((_, i) => (
+      <MarketCardSkeleton key={i} />
+    ))}
+  </div>
+));
+
+// Trending skeleton
+const TrendingCardSkeleton = memo(() => (
+  <div 
+    className="animate-pulse"
+    style={{
+      background: 'transparent',
+      backdropFilter: 'blur(26px)',
+      borderRadius: '14px',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      minHeight: '220px',
+      padding: '20px 18px',
+    }}
+  >
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '20px' }}>
+      <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)' }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ height: '20px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px', marginBottom: '8px', width: '85%' }} />
+        <div style={{ height: '14px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', width: '50%' }} />
+      </div>
+    </div>
+    <div style={{ marginBottom: '14px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <div style={{ width: '50px', height: '14px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px' }} />
+        <div style={{ width: '70px', height: '18px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px' }} />
+      </div>
+      <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px' }} />
+    </div>
+    <div style={{ display: 'flex', gap: '10px' }}>
+      <div style={{ flex: 1, height: '48px', background: 'rgba(67, 199, 115, 0.08)', borderRadius: '8px' }} />
+      <div style={{ flex: 1, height: '48px', background: 'rgba(225, 55, 55, 0.08)', borderRadius: '8px' }} />
+    </div>
+  </div>
+));
+
+const TrendingSkeleton = memo(() => (
+  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
+    {[...Array(3)].map((_, i) => (
+      <TrendingCardSkeleton key={i} />
+    ))}
+  </div>
+));
+
 // Lazy image component for market cards - optimized for CLS
 const LazyMarketImage = memo(({ src, alt, width = 48, height = 48 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -360,7 +452,11 @@ const HomeWormStyle = () => {
               </h2>
             </div>
             
-            {trendingMarkets.length > 0 && (
+            {/* Show skeleton while loading, then real content */}
+            {loading ? (
+              <TrendingSkeleton />
+            ) : (
+              trendingMarkets.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
               {trendingMarkets.map((market) => (
                 <div
@@ -607,6 +703,7 @@ const HomeWormStyle = () => {
                 </div>
               ))}
             </div>
+              )
             )}
           </div>
         )}
@@ -662,9 +759,7 @@ const HomeWormStyle = () => {
 
         {/* Markets Grid */}
         {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
-          </div>
+          <MarketsGridSkeleton />
         ) : sortedMarkets.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-gray-400 text-lg font-space-grotesk">
