@@ -177,10 +177,9 @@ const Activity = () => {
   const history = useHistory();
 
   const filterOptions = [
-    { key: 'all', label: 'All' },
-    { key: 'trades', label: 'Trades' },
     { key: 'resolved', label: 'Resolved' },
     { key: 'created', label: 'Created' },
+    { key: 'trades', label: 'Trades' },
   ];
 
   const handleActivityClick = (item) => {
@@ -191,11 +190,9 @@ const Activity = () => {
 
   // Filter activity
   const filteredActivity = activity.filter((item) => {
-    if (filter === 'all') return true;
     if (filter === 'trades') return item.eventType === 'ORDER_FILLED' || item.eventType === 'ORDER_PLACED';
     if (filter === 'resolved') return item.eventType === 'MARKET_RESOLVED';
     if (filter === 'created') return item.eventType === 'MARKET_CREATED';
-    return true;
   });
 
   useEffect(() => {
@@ -261,7 +258,7 @@ const Activity = () => {
                 className="flex items-center justify-between sm:justify-start gap-3 bg-transparent border-2 border-[#FFE600] text-[#FFE600] rounded-full px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-medium cursor-pointer hover:bg-[#FFE600]/10 transition-all focus:outline-none w-full sm:w-auto"
                 style={{ minWidth: '120px' }}
               >
-                <span>{filterOptions.find(o => o.key === filter)?.label || 'All'}</span>
+                <span>{filterOptions.find(o => o.key === filter)?.label || 'Resolved'}</span>
                 <svg 
                   className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`}
                   fill="none" 
@@ -311,7 +308,7 @@ const Activity = () => {
               <div className="px-4 py-6 text-sm text-[#BABABA]">
                 {activity.length === 0 
                   ? 'No recent activity yet. Trade a market to see it here.'
-                  : `No ${filter === 'all' ? '' : filter} activity found.`
+                  : `No ${filter === 'resolved' ? '' : filter} activity found.`
                 }
               </div>
             </div>
