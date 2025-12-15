@@ -2,6 +2,20 @@ import React, { useState, memo } from 'react';
 import { useHistory } from 'react-router-dom';
 import '../../pages/market/MarketDetailGlass.css';
 
+// Inline skeleton for selective loading
+const SkeletonText = memo(({ width = '100%', height = '20px', style = {} }) => (
+  <div 
+    className="animate-pulse"
+    style={{
+      width,
+      height,
+      background: 'rgba(255,255,255,0.1)',
+      borderRadius: '6px',
+      ...style
+    }}
+  />
+));
+
 // Lazy image component with blur placeholder - optimized for CLS
 const LazyImage = memo(({ src, alt, width = 48, height = 54 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -102,17 +116,24 @@ const getTimeRemaining = (endTime, resolutionDateTime) => {
 const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
   const history = useHistory();
   
+  // Check if prices are still loading
+  const isPriceLoading = market._priceLoading || (market.yesPrice == null && market.noPrice == null);
+  
   // Use actual prices from market if available (from blockchain), otherwise calculate from probability
   let yesPrice, noPrice;
-  if (market.yesPrice !== undefined && market.noPrice !== undefined) {
+  if (market.yesPrice != null && market.noPrice != null) {
     // Prices are already in cents from blockchain
     yesPrice = Math.round(market.yesPrice);
     noPrice = Math.round(market.noPrice);
-  } else {
-    // Fallback to probability calculation
+  } else if (!isPriceLoading) {
+    // Fallback to probability calculation only if not loading
     const probability = market.currentProbability || market.initialProbability || 0.5;
     yesPrice = Math.round(probability * 100);
     noPrice = 100 - yesPrice;
+  } else {
+    // Loading state - use placeholder values
+    yesPrice = null;
+    noPrice = null;
   }
   
   const handleCardClick = (e) => {
@@ -169,7 +190,7 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
   };
 
   // Calculate progress bar width (YES percentage)
-  const progressWidth = `${yesPrice}%`;
+  const progressWidth = yesPrice != null ? `${yesPrice}%` : '50%';
 
   return (
     <div 
@@ -272,28 +293,34 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
             
             {/* Percentage and Label on right */}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-              <span 
-                style={{
-                  fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                  fontWeight: 500,
-                  fontSize: '19.5px',
-                  lineHeight: '28.5px',
-                  color: '#F2F2F2'
-                }}
-              >
-                {yesPrice}%
-              </span>
-              <span 
-                style={{
-                  fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                  fontWeight: 500,
-                  fontSize: '14px',
-                  lineHeight: '28.5px',
-                  color: '#899CB2'
-                }}
-              >
-                chance
-              </span>
+              {isPriceLoading || yesPrice == null ? (
+                <SkeletonText width="55px" height="22px" />
+              ) : (
+                <>
+                  <span 
+                    style={{
+                      fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                      fontWeight: 500,
+                      fontSize: '19.5px',
+                      lineHeight: '28.5px',
+                      color: '#F2F2F2'
+                    }}
+                  >
+                    {yesPrice}%
+                  </span>
+                  <span 
+                    style={{
+                      fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                      fontWeight: 500,
+                      fontSize: '14px',
+                      lineHeight: '28.5px',
+                      color: '#899CB2'
+                    }}
+                  >
+                    chance
+                  </span>
+                </>
+              )}
             </div>
           </div>
           
@@ -308,16 +335,28 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
               boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)'
             }}
           >
-            <div 
-              style={{
-                width: progressWidth,
-                height: '100%',
-                background: 'linear-gradient(90deg, #F7D022 0%, #FFE566 100%)',
-                borderRadius: '3px',
-                transition: 'width 0.3s ease',
-                boxShadow: '0 0 8px rgba(247, 208, 34, 0.4)'
-              }}
-            />
+            {isPriceLoading || yesPrice == null ? (
+              <div 
+                className="animate-pulse"
+                style={{
+                  width: '50%',
+                  height: '100%',
+                  background: 'rgba(247, 208, 34, 0.3)',
+                  borderRadius: '3px',
+                }}
+              />
+            ) : (
+              <div 
+                style={{
+                  width: progressWidth,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #F7D022 0%, #FFE566 100%)',
+                  borderRadius: '3px',
+                  transition: 'width 0.3s ease',
+                  boxShadow: '0 0 8px rgba(247, 208, 34, 0.4)'
+                }}
+              />
+            )}
           </div>
         </div>
         

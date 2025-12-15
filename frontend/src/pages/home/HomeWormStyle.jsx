@@ -94,6 +94,20 @@ const TrendingCardSkeleton = memo(() => (
   </div>
 ));
 
+// Inline skeleton component for selective loading
+const SkeletonText = memo(({ width = '100%', height = '20px', style = {} }) => (
+  <div 
+    className="animate-pulse"
+    style={{
+      width,
+      height,
+      background: 'rgba(255,255,255,0.1)',
+      borderRadius: '6px',
+      ...style
+    }}
+  />
+));
+
 const TrendingSkeleton = memo(() => (
   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
     {[...Array(3)].map((_, i) => (
@@ -192,6 +206,7 @@ const HomeWormStyle = () => {
   const fetchMarkets = async () => {
     try {
       setLoading(true);
+      // Reset for fresh fetch but keep any existing data visible
       
       // Create a direct provider if wallet is not connected
       let contractToUse = contracts?.predictionMarket;
@@ -211,77 +226,114 @@ const HomeWormStyle = () => {
 
       const activeMarkets = await contractToUse.getActiveMarkets();
       
+      // Fetch images in parallel (don't block market rendering)
       let persistedImages = {};
-      try {
-        const imageResponse = await fetch(`${API_BASE}/api/market-images`);
-        if (imageResponse.ok) {
-          const imageData = await imageResponse.json();
+      const imagePromise = fetch(`${API_BASE}/api/market-images`)
+        .then(res => res.ok ? res.json() : { images: [] })
+        .then(imageData => {
           const imagesArray = Array.isArray(imageData.images) ? imageData.images : [];
           imagesArray.forEach((img) => {
             if (img.marketId && img.imageUrl) {
               persistedImages[img.marketId.toString()] = img.imageUrl;
             }
           });
+        })
+        .catch(() => console.warn('Unable to load market images from API'));
+
+      // Stream markets progressively - first come, first serve
+      const allMarketsData = [];
+      
+      // Process markets one by one and update state progressively
+      for (const marketId of activeMarkets) {
+        try {
+          const market = await contractToUse.getMarket(marketId);
+          
+          // Skip inactive/resolved markets early
+          if (!market.active || market.resolved) continue;
+          
+          const marketIdStr = marketId.toString();
+          
+          // Create partial market data immediately (basic info first)
+          const partialMarket = {
+            id: marketIdStr,
+            question: market.question,
+            category: market.category || 'General',
+            yesPrice: null, // Will be filled in
+            noPrice: null,
+            totalYesShares: parseFloat(ethers.utils.formatEther(market.totalYesShares)),
+            totalNoShares: parseFloat(ethers.utils.formatEther(market.totalNoShares)),
+            volume: null, // Will be computed
+            creator: market.creator,
+            resolved: market.resolved,
+            active: market.active,
+            createdAt: market.createdAt ? new Date(market.createdAt.toNumber() * 1000) : new Date(),
+            endTime: market.endTime ? new Date(market.endTime.toNumber() * 1000).toISOString() : null,
+            resolutionTime: market.resolutionTime ? new Date(market.resolutionTime.toNumber() * 1000).toISOString() : null,
+            imageUrl: persistedImages[marketIdStr] || (market.imageUrl ?? null),
+            _priceLoading: true, // Flag for skeleton state
+          };
+          
+          // Calculate volume from shares
+          partialMarket.volume = partialMarket.totalYesShares + partialMarket.totalNoShares;
+          
+          // Add to allMarketsData and update state immediately
+          allMarketsData.push(partialMarket);
+          
+          // Update markets state progressively
+          setMarkets([...allMarketsData]);
+          
+          // Update trending (top 3 by volume) progressively
+          const sortedForTrending = [...allMarketsData].sort((a, b) => b.volume - a.volume);
+          setTrendingMarkets(sortedForTrending.slice(0, 3));
+          
+          // Fetch prices asynchronously and update when ready
+          contractToUse.getCurrentPrice(marketId, true)
+            .then(async (yesPriceBps) => {
+              const noPriceBps = await contractToUse.getCurrentPrice(marketId, false);
+              const yesPrice = Math.round(parseFloat(yesPriceBps.toString()) / 100);
+              const noPrice = Math.round(parseFloat(noPriceBps.toString()) / 100);
+              
+              // Update the market with price data
+              setMarkets(prev => prev.map(m => 
+                m.id === marketIdStr 
+                  ? { ...m, yesPrice, noPrice, _priceLoading: false }
+                  : m
+              ));
+              setTrendingMarkets(prev => prev.map(m => 
+                m.id === marketIdStr 
+                  ? { ...m, yesPrice, noPrice, _priceLoading: false }
+                  : m
+              ));
+            })
+            .catch(() => {
+              // Set defaults if price fetch fails
+              setMarkets(prev => prev.map(m => 
+                m.id === marketIdStr 
+                  ? { ...m, yesPrice: 50, noPrice: 50, _priceLoading: false }
+                  : m
+              ));
+              setTrendingMarkets(prev => prev.map(m => 
+                m.id === marketIdStr 
+                  ? { ...m, yesPrice: 50, noPrice: 50, _priceLoading: false }
+                  : m
+              ));
+            });
+          
+        } catch (err) {
+          console.error(`Error fetching market ${marketId}:`, err);
         }
-      } catch (imgErr) {
-        console.warn('Unable to load market images from API:', imgErr);
       }
 
-      const marketsData = await Promise.all(
-        activeMarkets.map(async (marketId) => {
-          try {
-            const market = await contractToUse.getMarket(marketId);
-            
-            // Get current prices from AMM (same as chart)
-            let yesPrice = 50; // Default 50%
-            let noPrice = 50;
-            
-            try {
-              // Prices come as basis points from contract (5000 = 50%)
-              const yesPriceBps = await contractToUse.getCurrentPrice(marketId, true);
-              const noPriceBps = await contractToUse.getCurrentPrice(marketId, false);
-              yesPrice = parseFloat(yesPriceBps.toString()) / 100; // Convert to percentage
-              noPrice = parseFloat(noPriceBps.toString()) / 100;
-            } catch (priceErr) {
-              console.log(`Could not get AMM prices for market ${marketId}, using defaults`);
-            }
-            
-            // Calculate volume from shares
-            const totalYes = parseFloat(ethers.utils.formatEther(market.totalYesShares));
-            const totalNo = parseFloat(ethers.utils.formatEther(market.totalNoShares));
-            const volume = totalYes + totalNo;
-
-            const marketIdStr = marketId.toString();
-
-            return {
-              id: marketIdStr,
-              question: market.question,
-              category: market.category || 'General',
-              yesPrice: Math.round(yesPrice), // Round to whole number for display
-              noPrice: Math.round(noPrice),
-              totalYesShares: totalYes,
-              totalNoShares: totalNo,
-              volume,
-              creator: market.creator,
-              resolved: market.resolved,
-              active: market.active,
-              createdAt: market.createdAt ? new Date(market.createdAt.toNumber() * 1000) : new Date(),
-              endTime: market.endTime ? new Date(market.endTime.toNumber() * 1000).toISOString() : null,
-              resolutionTime: market.resolutionTime ? new Date(market.resolutionTime.toNumber() * 1000).toISOString() : null,
-              imageUrl: persistedImages[marketIdStr] || (market.imageUrl ?? null),
-            };
-          } catch (err) {
-            console.error(`Error fetching market ${marketId}:`, err);
-            return null;
-          }
-        })
-      );
-
-      const activeMarketsData = marketsData.filter(m => m && m.active && !m.resolved);
-      setMarkets(activeMarketsData);
-            // Set top 3 as trending
-      const sorted = [...activeMarketsData].sort((a, b) => b.volume - a.volume);
-      setTrendingMarkets(sorted.slice(0, 3));
+      // Wait for images to load and update markets with images
+      await imagePromise;
+      setMarkets(prev => prev.map(m => ({
+        ...m,
+        imageUrl: persistedImages[m.id] || m.imageUrl
+      })));
+      setTrendingMarkets(prev => prev.map(m => ({
+        ...m,
+        imageUrl: persistedImages[m.id] || m.imageUrl
+      })));
       
     } catch (error) {
       console.error('Error fetching markets:', error);
@@ -452,8 +504,8 @@ const HomeWormStyle = () => {
               </h2>
             </div>
             
-            {/* Show skeleton while loading, then real content */}
-            {loading ? (
+            {/* Show skeleton placeholders while initial load, then progressively show content */}
+            {loading && trendingMarkets.length === 0 ? (
               <TrendingSkeleton />
             ) : (
               trendingMarkets.length > 0 && (
@@ -568,33 +620,45 @@ const HomeWormStyle = () => {
                             color: '#F2F2F2'
                           }}
                         >
-                          {market.volume >= 1000000 ? `${(market.volume / 1000000).toFixed(1)}m` : market.volume >= 1000 ? `${(market.volume / 1000).toFixed(1)}k` : market.volume.toFixed(2)} Vol.
+                          {market.volume != null ? (
+                            <>
+                              {market.volume >= 1000000 ? `${(market.volume / 1000000).toFixed(1)}m` : market.volume >= 1000 ? `${(market.volume / 1000).toFixed(1)}k` : market.volume.toFixed(2)} Vol.
+                            </>
+                          ) : (
+                            <SkeletonText width="60px" height="14px" />
+                          )}
                         </div>
                         
                         {/* Percentage and Label on right */}
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                          <span 
-                            style={{
-                              fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                              fontWeight: 500,
-                              fontSize: '18.38px',
-                              lineHeight: '27.58px',
-                              color: '#F2F2F2'
-                            }}
-                          >
-                            {market.yesPrice}%
-                          </span>
-                          <span 
-                            style={{
-                              fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                              fontWeight: 500,
-                              fontSize: '13.83px',
-                              lineHeight: '27.58px',
-                              color: '#899CB2'
-                            }}
-                          >
-                            chance
-                          </span>
+                          {market._priceLoading || market.yesPrice == null ? (
+                            <SkeletonText width="55px" height="22px" />
+                          ) : (
+                            <>
+                              <span 
+                                style={{
+                                  fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                                  fontWeight: 500,
+                                  fontSize: '18.38px',
+                                  lineHeight: '27.58px',
+                                  color: '#F2F2F2'
+                                }}
+                              >
+                                {market.yesPrice}%
+                              </span>
+                              <span 
+                                style={{
+                                  fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                                  fontWeight: 500,
+                                  fontSize: '13.83px',
+                                  lineHeight: '27.58px',
+                                  color: '#899CB2'
+                                }}
+                              >
+                                chance
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                       
@@ -609,15 +673,28 @@ const HomeWormStyle = () => {
                           boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)'
                         }}
                       >
-                        <div 
-                          style={{
-                            width: `${market.yesPrice}%`,
-                            height: '100%',
-                            background: 'linear-gradient(90deg, #F7D022 0%, #FFE566 100%)',
-                            borderRadius: '3px',
-                            boxShadow: '0 0 8px rgba(247, 208, 34, 0.4)'
-                          }}
-                        />
+                        {market._priceLoading || market.yesPrice == null ? (
+                          <div 
+                            className="animate-pulse"
+                            style={{
+                              width: '50%',
+                              height: '100%',
+                              background: 'rgba(247, 208, 34, 0.3)',
+                              borderRadius: '3px',
+                            }}
+                          />
+                        ) : (
+                          <div 
+                            style={{
+                              width: `${market.yesPrice}%`,
+                              height: '100%',
+                              background: 'linear-gradient(90deg, #F7D022 0%, #FFE566 100%)',
+                              borderRadius: '3px',
+                              boxShadow: '0 0 8px rgba(247, 208, 34, 0.4)',
+                              transition: 'width 0.3s ease-out'
+                            }}
+                          />
+                        )}
                       </div>
                     </div>
                     
