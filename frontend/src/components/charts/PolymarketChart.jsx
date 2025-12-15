@@ -191,8 +191,8 @@ const PolymarketChart = ({
     }
 
     // Format data and filter by time range
-    const formatSeriesData = (lineData) =>
-      lineData
+    const formatSeriesData = (lineData, fallbackPrice = null) => {
+      let filtered = lineData
         .filter(([ts]) => timeCutoff === 0 || ts >= timeCutoff)
         .map(([ts, value]) => {
           const rawPercent = Number(value || 0) * 100;
@@ -201,28 +201,60 @@ const PolymarketChart = ({
             actual: rawPercent
           };
         });
+      
+      // If only 1 point or no points in range, but we have data, create a line
+      if (filtered.length <= 1 && lineData.length > 0) {
+        // Get the most recent value from all data
+        const lastPoint = lineData[lineData.length - 1];
+        const lastValue = Number(lastPoint[1] || 0) * 100;
+        
+        // Use fallback price if available
+        const displayValue = filtered.length === 1 ? filtered[0].actual : 
+                            (fallbackPrice !== null ? Number(fallbackPrice) * 100 : lastValue);
+        
+        // Create start point at cutoff time (or earliest data time for 'all')
+        const startTime = timeCutoff > 0 ? timeCutoff : (lineData[0]?.[0] || now - 86400000);
+        const endTime = now;
+        
+        filtered = [
+          { value: [startTime, displayValue], actual: displayValue },
+          { value: [endTime, displayValue], actual: displayValue }
+        ];
+      } else if (filtered.length > 0) {
+        // Extend line to current time with last known value
+        const lastFiltered = filtered[filtered.length - 1];
+        if (lastFiltered.value[0] < now - 60000) { // If last point is more than 1 min old
+          filtered.push({
+            value: [now, lastFiltered.actual],
+            actual: lastFiltered.actual
+          });
+        }
+      }
+      
+      return filtered;
+    };
 
-    const yesData = formatSeriesData(yesLineData);
-    const noData = formatSeriesData(noLineData);
+    const yesData = formatSeriesData(yesLineData, currentYesPrice);
+    const noData = formatSeriesData(noLineData, currentNoPrice);
 
-    // If no data in selected range, show empty state
+    // If no data at all, show empty state
     if (yesData.length === 0 && noData.length === 0) {
       return null;
     }
 
-    // Calculate time range from filtered data
+    // Calculate time range
     const allTimestamps = [
       ...yesData.map((point) => point.value[0]),
       ...noData.map((point) => point.value[0])
     ].filter(Number.isFinite);
     
-    // Set min/max based on selection or data
+    // Set min/max - use cutoff for min when in a time range
     const dataMinTime = allTimestamps.length > 0 ? Math.min(...allTimestamps) : now - 86400000;
     const dataMaxTime = allTimestamps.length > 0 ? Math.max(...allTimestamps) : now;
     
-    // For time ranges, use cutoff as min if it's larger than data min
-    const minTime = timeCutoff > 0 ? Math.max(timeCutoff, dataMinTime) : dataMinTime;
-    const maxTime = dataMaxTime;
+    // For time ranges, use cutoff as min
+    const minTime = timeCutoff > 0 ? timeCutoff : dataMinTime;
+    const maxTime = Math.max(dataMaxTime, now); // Always extend to now
 
     const latestYes = yesData.length ? yesData[yesData.length - 1].actual : 0;
     const latestNo = noData.length ? noData[noData.length - 1].actual : 0;

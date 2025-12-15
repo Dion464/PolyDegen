@@ -393,7 +393,17 @@ const AdminResolution = () => {
   };
 
   if (!isConnected || !account) {
-    return null;
+    return (
+      <div className="min-h-screen bg-[#050505] text-white">
+        <WormStyleNavbar />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
+          <div className="glass-card rounded-[24px] border border-white/10 bg-white/5 px-6 sm:px-8 py-12 text-center">
+            <h1 className="text-2xl font-semibold text-white mb-4">Connect Wallet Required</h1>
+            <p className="text-white/60 mb-6">Please connect your admin wallet to access the resolution dashboard.</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

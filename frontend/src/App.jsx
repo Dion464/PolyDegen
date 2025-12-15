@@ -37,7 +37,6 @@ function App() {
         <AuthProvider>
           <Router>
             <div className='App min-h-screen bg-gray-50 font-body'>
-            {/*  <ModernNavbar /> */}
               <main>
                 <AppRoutes />
               </main>
