@@ -4,12 +4,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(() => {
   return {
     server: {
-      host: '127.0.0.1', // Use explicit localhost
+      host: '127.0.0.1',
       port: 3000,
-      strictPort: false, // Allow port fallback
-      open: true, // Auto-open browser
-      // open: '/markets', // Optional: open to specific path
-      // To specify browser, use: open: 'chrome' or 'firefox' or 'safari' or path
+      strictPort: false,
+      open: true,
       proxy: {
         '/v0': {
           target: 'http://localhost:8080',
@@ -37,14 +35,59 @@ export default defineConfig(() => {
     build: {
       outDir: 'dist',
       commonjsOptions: { transformMixedEsModules: true },
-      chunkSizeWarningLimit: 1000,
+      chunkSizeWarningLimit: 500,
+      // Optimize for production - use esbuild (default, faster than terser)
+      minify: 'esbuild',
       rollupOptions: {
         external: [],
+        output: {
+          // Smart chunk splitting for better caching
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              // Vendor chunks - split by package for better caching
+              if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+                return 'vendor-react';
+              }
+              if (id.includes('ethers')) {
+                return 'vendor-ethers';
+              }
+              if (id.includes('chart') || id.includes('echarts') || id.includes('highcharts') || id.includes('recharts')) {
+                return 'vendor-charts';
+              }
+              // Other vendor code
+              return 'vendor';
+            }
+          },
+          // Optimize asset file names for caching
+          assetFileNames: (assetInfo) => {
+            const info = assetInfo.name.split('.');
+            const ext = info[info.length - 1];
+            if (/png|jpe?g|svg|gif|tiff|bmp|ico/i.test(ext)) {
+              return `assets/images/[name]-[hash][extname]`;
+            }
+            if (/woff2?|eot|ttf|otf/i.test(ext)) {
+              return `assets/fonts/[name]-[hash][extname]`;
+            }
+            return `assets/[name]-[hash][extname]`;
+          },
+          chunkFileNames: 'assets/js/[name]-[hash].js',
+          entryFileNames: 'assets/js/[name]-[hash].js',
+        },
       },
+      // Target modern browsers for smaller bundles
+      target: 'es2020',
+      // Enable source maps for error tracking (optional)
+      sourcemap: false,
     },
     plugins: [react()],
     css: {
-      target: 'async',
+      // Optimize CSS
+      devSourcemap: false,
+    },
+    // Enable gzip pre-compression
+    esbuild: {
+      // Remove legal comments
+      legalComments: 'none',
     },
   };
 });

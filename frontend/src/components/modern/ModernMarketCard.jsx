@@ -1,6 +1,50 @@
-import React from 'react';
+import React, { useState, memo } from 'react';
 import { useHistory } from 'react-router-dom';
 import '../../pages/market/MarketDetailGlass.css';
+
+// Lazy image component with blur placeholder
+const LazyImage = memo(({ src, alt, width, height, className, style }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  // Optimize Unsplash URLs
+  const optimizeSrc = (url) => {
+    if (!url) return url;
+    if (url.includes('source.unsplash.com')) {
+      return url.replace(/\/\d+x\d+\//, '/100x100/');
+    }
+    return url;
+  };
+
+  if (hasError) return null;
+
+  return (
+    <>
+      {!isLoaded && (
+        <div 
+          className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-800 animate-pulse"
+          style={{ borderRadius: 'inherit' }}
+        />
+      )}
+      <img
+        src={optimizeSrc(src)}
+        alt={alt}
+        width={width}
+        height={height}
+        loading="lazy"
+        decoding="async"
+        onLoad={() => setIsLoaded(true)}
+        onError={() => setHasError(true)}
+        className={className}
+        style={{
+          ...style,
+          opacity: isLoaded ? 1 : 0,
+          transition: 'opacity 0.3s ease'
+        }}
+      />
+    </>
+  );
+});
 
 // Helper function to format volume
 const formatVolumeDisplay = (volume) => {
@@ -115,7 +159,8 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
     const keywords = categoryKeywords[category] || categoryKeywords['General'];
     const seed = parseInt(marketId) % 1000;
     
-    return `https://source.unsplash.com/400x200/?${keywords}&sig=${seed}`;
+    // Request smaller image size for thumbnails (48x54 display)
+    return `https://source.unsplash.com/100x100/?${keywords}&sig=${seed}`;
   };
 
   // Calculate progress bar width (YES percentage)
@@ -152,16 +197,16 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
               flexShrink: 0,
               background: 'rgba(255, 255, 255, 0.05)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+              position: 'relative'
             }}
           >
-            <img
+            <LazyImage
               src={getMarketImage()}
-              alt={market.questionTitle || 'Market'}
+              alt={market.questionTitle || market.question || 'Market prediction'}
+              width={48}
+              height={54}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              onError={(e) => {
-                e.target.style.display = 'none';
-              }}
             />
           </div>
           

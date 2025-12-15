@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, memo } from 'react';
 import { useHistory } from 'react-router-dom';
 import { useWeb3 } from '../../hooks/useWeb3';
 import { getCurrencySymbol } from '../../utils/currency';
@@ -9,6 +9,48 @@ import ModernMarketCard from '../../components/modern/ModernMarketCard';
 import HowItWorksModal from '../../components/modal/HowItWorksModal';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, RPC_URL } from '../../contracts/eth-config';
 import '../market/MarketDetailGlass.css';
+
+// Lazy image component for market cards
+const LazyMarketImage = memo(({ src, alt }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  // Optimize Unsplash URLs for smaller sizes
+  const optimizeSrc = (url) => {
+    if (!url) return url;
+    if (url.includes('source.unsplash.com')) {
+      return url.replace(/\/600x400\//, '/100x100/').replace(/\?.*$/, '?w=100&h=100');
+    }
+    return url;
+  };
+
+  if (hasError) return null;
+
+  return (
+    <>
+      {!isLoaded && (
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-800 animate-pulse" />
+      )}
+      <img
+        src={optimizeSrc(src)}
+        alt={alt}
+        width={48}
+        height={48}
+        loading="lazy"
+        decoding="async"
+        onLoad={() => setIsLoaded(true)}
+        onError={() => setHasError(true)}
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          objectFit: 'cover',
+          opacity: isLoaded ? 1 : 0,
+          transition: 'opacity 0.3s ease'
+        }}
+      />
+    </>
+  );
+});
 
 const HomeWormStyle = () => {
   const history = useHistory();
@@ -224,7 +266,8 @@ const HomeWormStyle = () => {
     const keywords = categoryKeywords[category] || categoryKeywords['General'];
     const seed = parseInt(market.id || '0', 10) % 1000;
     
-    return `https://source.unsplash.com/600x400/?${keywords}&sig=${seed}`;
+    // Request smaller image size for thumbnails (48x48 display)
+    return `https://source.unsplash.com/100x100/?${keywords}&sig=${seed}`;
   };
 
   return (
@@ -232,15 +275,16 @@ const HomeWormStyle = () => {
       {/* Navbar */}
       <WormStyleNavbar />
       
-      {/* Hero Section */}
+      {/* Hero Section - Optimized with preloaded background */}
       <div 
         className="relative w-full overflow-visible"
         style={{
-          backgroundImage: 'url(/hero-background.png)',
+          backgroundImage: 'url(/hero-background.jpg)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           minHeight: 'min(500px, 60vh)',
-          paddingBottom: 'clamp(100px, 25vw, 200px)'
+          paddingBottom: 'clamp(100px, 25vw, 200px)',
+          willChange: 'transform' // Optimize paint performance
         }}
       >
         {/* Dark overlay */}
@@ -327,7 +371,7 @@ const HomeWormStyle = () => {
                   <div style={{ padding: '20px 18px', height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {/* Top Section: Icon + Title + End Time */}
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '20px' }}>
-                      {/* Market Icon */}
+                      {/* Market Icon - Optimized lazy loading */}
                       <div 
                         style={{
                           width: '48px',
@@ -337,14 +381,13 @@ const HomeWormStyle = () => {
                           flexShrink: 0,
                           background: 'rgba(255, 255, 255, 0.05)',
                           border: '1px solid rgba(255, 255, 255, 0.1)',
-                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+                          position: 'relative'
                         }}
                       >
-                        <img
+                        <LazyMarketImage
                           src={getMarketImage(market)}
-                          alt={market.question || 'Market'}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          onError={(e) => { e.target.style.display = 'none'; }}
+                          alt={market.question || 'Market prediction image'}
                         />
                       </div>
                       
@@ -581,16 +624,20 @@ const HomeWormStyle = () => {
           </div>
           
           <div className="relative w-full sm:w-auto">
+            <label htmlFor="sort-markets" className="sr-only">Sort markets by</label>
             <select 
+              id="sort-markets"
+              name="sort-markets"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
+              aria-label="Sort markets"
               className="appearance-none flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-[#222222] text-white rounded-full hover:bg-[#333333] transition-all whitespace-nowrap border border-white/10 cursor-pointer text-[12px] sm:text-[14px] font-medium font-space-grotesk pr-9 sm:pr-10 w-full sm:w-auto"
             >
               <option value="newest">Sort: Newest</option>
               <option value="volume">Sort: Volume</option>
               <option value="popular">Sort: Popular</option>
             </select>
-            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </div>
@@ -661,18 +708,18 @@ const HomeWormStyle = () => {
             </button>
             
             <div className="flex gap-4 order-3">
-              <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition-colors">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
+              <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition-colors" aria-label="Follow us on X (Twitter)">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                 </svg>
               </a>
-              <a href="https://discord.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition-colors">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
+              <a href="https://discord.com" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition-colors" aria-label="Join our Discord community">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z"/>
                 </svg>
               </a>
-              <a href="https://telegram.org" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition-colors">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
+              <a href="https://telegram.org" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition-colors" aria-label="Join our Telegram group">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12a12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472c-.18 1.898-.962 6.502-1.36 8.627c-.168.9-.499 1.201-.82 1.23c-.696.065-1.225-.46-1.9-.902c-1.056-.693-1.653-1.124-2.678-1.8c-1.185-.78-.417-1.21.258-1.91c.177-.184 3.247-2.977 3.307-3.23c.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345c-.48.33-.913.49-1.302.48c-.428-.008-1.252-.241-1.865-.44c-.752-.245-1.349-.374-1.297-.789c.027-.216.325-.437.893-.663c3.498-1.524 5.83-2.529 6.998-3.014c3.332-1.386 4.025-1.627 4.476-1.635z"/>
                 </svg>
               </a>

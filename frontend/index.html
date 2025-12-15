@@ -6,27 +6,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#000000" />
   <meta name="description" content="PolyDegen - Trade on the outcome of future events" />
+  
+  <!-- Preload critical assets for LCP -->
+  <link rel="preload" as="image" href="/hero-background.jpg" fetchpriority="high" />
+  
+  <!-- DNS prefetch and preconnect for external resources -->
+  <link rel="dns-prefetch" href="https://source.unsplash.com" />
+  <link rel="preconnect" href="https://source.unsplash.com" crossorigin />
+  
   <link rel="shortcut icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="preconnect" href="https://fonts.cdnfonts.com">
-  <link href="https://fonts.cdnfonts.com/css/clash-grotesk" rel="stylesheet">
-  <!--
-      manifest.json provides metadata used when your web app is installed on a
-      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-    -->
-  <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
-
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
+  
+  <!-- Optimized font loading - preload critical fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://fonts.cdnfonts.com" crossorigin />
+  
+  <!-- Preload critical font files -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" />
+  <link rel="preload" as="style" href="https://fonts.cdnfonts.com/css/clash-grotesk" />
+  
+  <!-- Load fonts with display=swap for better performance -->
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <link href="https://fonts.cdnfonts.com/css/clash-grotesk" rel="stylesheet" media="print" onload="this.media='all'" />
+  
+  <!-- Fallback for browsers without JS -->
+  <noscript>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.cdnfonts.com/css/clash-grotesk" rel="stylesheet" />
+  </noscript>
+  
   <title>PolyDegen</title>
+  
+  <!-- Critical CSS for above-the-fold content -->
+  <style>
+    /* Critical CSS - inline for instant rendering */
+    *{box-sizing:border-box}
+    body{margin:0;background:#0E0E0E;font-family:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    #root{min-height:100vh}
+    /* Loading skeleton */
+    .skeleton-pulse{animation:pulse 1.5s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+  </style>
 </head>
 
 <body>
@@ -35,16 +56,6 @@
   <div id="modal-root"></div>
   <script src="/env-config.js"></script>
   <script type="module" src="./src/main.jsx"></script>
-  <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
-
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
 </body>
 
 </html>
