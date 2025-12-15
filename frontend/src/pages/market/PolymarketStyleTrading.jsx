@@ -1,7 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { useParams, useHistory } from 'react-router-dom';
-import PolymarketChart from '../../components/charts/PolymarketChart';
 import Web3TradingInterface from '../../components/trading/Web3TradingInterface';
+
+// Lazy load the chart component (827KB charts library)
+const PolymarketChart = lazy(() => import('../../components/charts/PolymarketChart'));
+
+// Chart loading fallback
+const ChartSkeleton = () => (
+  <div className="bg-white/5 animate-pulse rounded-[12px] h-[400px] flex items-center justify-center">
+    <div className="text-white/40 text-sm">Loading chart...</div>
+  </div>
+);
 import WormStyleNavbar from '../../components/modern/WormStyleNavbar';
 import { useWeb3 } from '../../hooks/useWeb3';
 import { getCurrencySymbol } from '../../utils/currency';
@@ -860,26 +869,28 @@ const PolymarketStyleTrading = () => {
             </div>
            
 
-            {/* Price History Chart */}
-            <div>
-              <PolymarketChart 
-                yesPriceHistory={yesPriceHistory}
-                noPriceHistory={noPriceHistory}
-                priceHistory={priceHistory}
-                currentYesPrice={market?.yesPrice ? market.yesPrice / 100 : 0.5}
-                currentNoPrice={market?.noPrice ? market.noPrice / 100 : 0.5}
-                height={300}
-                selectedRange={timeframe}
-                onRangeChange={handleTimeframeChange}
-                ranges={[
-                  { label: '1H', value: '1h' },
-                  { label: '6H', value: '6h' },
-                  { label: '1D', value: '1d' },
-                  { label: '1W', value: '1w' },
-                  { label: '1M', value: '1m' },
-                  { label: 'ALL', value: 'all' }
-                ]}
-              />
+            {/* Price History Chart - Lazy loaded */}
+            <div style={{ minHeight: '300px' }}>
+              <Suspense fallback={<ChartSkeleton />}>
+                <PolymarketChart 
+                  yesPriceHistory={yesPriceHistory}
+                  noPriceHistory={noPriceHistory}
+                  priceHistory={priceHistory}
+                  currentYesPrice={market?.yesPrice ? market.yesPrice / 100 : 0.5}
+                  currentNoPrice={market?.noPrice ? market.noPrice / 100 : 0.5}
+                  height={300}
+                  selectedRange={timeframe}
+                  onRangeChange={handleTimeframeChange}
+                  ranges={[
+                    { label: '1H', value: '1h' },
+                    { label: '6H', value: '6h' },
+                    { label: '1D', value: '1d' },
+                    { label: '1W', value: '1w' },
+                    { label: '1M', value: '1m' },
+                    { label: 'ALL', value: 'all' }
+                  ]}
+                />
+              </Suspense>
             </div>
 
             {/* Tabs */}

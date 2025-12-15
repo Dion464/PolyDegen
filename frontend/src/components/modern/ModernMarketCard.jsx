@@ -2,8 +2,8 @@ import React, { useState, memo } from 'react';
 import { useHistory } from 'react-router-dom';
 import '../../pages/market/MarketDetailGlass.css';
 
-// Lazy image component with blur placeholder
-const LazyImage = memo(({ src, alt, width, height, className, style }) => {
+// Lazy image component with blur placeholder - optimized for CLS
+const LazyImage = memo(({ src, alt, width = 48, height = 54 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
 
@@ -11,38 +11,43 @@ const LazyImage = memo(({ src, alt, width, height, className, style }) => {
   const optimizeSrc = (url) => {
     if (!url) return url;
     if (url.includes('source.unsplash.com')) {
-      return url.replace(/\/\d+x\d+\//, '/100x100/');
+      return url.replace(/\/\d+x\d+\//, '/100x100/').replace(/\?.*$/, '?w=100&h=100&fit=crop');
     }
     return url;
   };
 
-  if (hasError) return null;
-
   return (
-    <>
-      {!isLoaded && (
+    <div style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: '#1a1a1a' }}>
+      {!isLoaded && !hasError && (
         <div 
-          className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-800 animate-pulse"
-          style={{ borderRadius: 'inherit' }}
+          className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-800"
+          style={{ animation: 'pulse 1.5s ease-in-out infinite' }}
         />
       )}
-      <img
-        src={optimizeSrc(src)}
-        alt={alt}
-        width={width}
-        height={height}
-        loading="lazy"
-        decoding="async"
-        onLoad={() => setIsLoaded(true)}
-        onError={() => setHasError(true)}
-        className={className}
-        style={{
-          ...style,
-          opacity: isLoaded ? 1 : 0,
-          transition: 'opacity 0.3s ease'
-        }}
-      />
-    </>
+      {!hasError && (
+        <img
+          src={optimizeSrc(src)}
+          alt={alt}
+          width={width}
+          height={height}
+          loading="lazy"
+          decoding="async"
+          fetchpriority="low"
+          onLoad={() => setIsLoaded(true)}
+          onError={() => setHasError(true)}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            opacity: isLoaded ? 1 : 0,
+            transition: 'opacity 0.2s ease',
+            position: 'absolute',
+            top: 0,
+            left: 0
+          }}
+        />
+      )}
+    </div>
   );
 });
 
@@ -192,13 +197,14 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
             style={{
               width: '48px',
               height: '54px',
+              minWidth: '48px',
+              minHeight: '54px',
               borderRadius: '8px',
               overflow: 'hidden',
               flexShrink: 0,
-              background: 'rgba(255, 255, 255, 0.05)',
+              background: '#1a1a1a',
               border: '1px solid rgba(255, 255, 255, 0.1)',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
-              position: 'relative'
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
             }}
           >
             <LazyImage
@@ -206,7 +212,6 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
               alt={market.questionTitle || market.question || 'Market prediction'}
               width={48}
               height={54}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           </div>
           

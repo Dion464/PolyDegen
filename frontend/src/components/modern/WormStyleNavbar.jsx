@@ -369,10 +369,13 @@ const WormStyleNavbar = () => {
             <button
               onClick={() => history.push('/')}
               className="flex items-center gap-2 hover:opacity-90 transition-opacity"
+              aria-label="Go to homepage"
             >
               <img
                 src="/poly.svg"
-                alt="PolyDegen"
+                alt="PolyDegen logo"
+                width={28}
+                height={28}
                 className="h-6 sm:h-7 w-auto"
               />
             </button>
@@ -428,8 +431,9 @@ const WormStyleNavbar = () => {
             <button
               onClick={() => setHowItWorksOpen(true)}
               className="p-1.5 sm:p-0"
+              aria-label="Learn how it works"
             >
-              <img src="/iicon.svg" alt="How it works" className="w-4 h-4" />
+              <img src="/iicon.svg" alt="" width={16} height={16} className="w-4 h-4" aria-hidden="true" />
             </button>
 
             <button

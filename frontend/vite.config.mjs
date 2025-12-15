@@ -84,10 +84,11 @@ export default defineConfig(() => {
       // Optimize CSS
       devSourcemap: false,
     },
-    // Enable gzip pre-compression
+    // Esbuild optimizations for production
     esbuild: {
-      // Remove legal comments
       legalComments: 'none',
+      // Drop console.log and debugger in production
+      drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
     },
   };
 });
