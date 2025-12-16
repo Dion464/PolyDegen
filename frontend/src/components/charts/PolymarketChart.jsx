@@ -182,10 +182,12 @@ const PolymarketChart = ({
     }
 
     // Add smooth, spread-out transitions between data points
+    // Scale interpolation based on time gap for consistent smoothness at all zoom levels
     const smoothTransitions = (data) => {
       if (!data || data.length < 2) return data;
       
       const result = [];
+      const ONE_HOUR = 60 * 60 * 1000;
       
       for (let i = 0; i < data.length; i++) {
         const current = data[i];
@@ -197,13 +199,17 @@ const PolymarketChart = ({
           const timeDiff = next[0] - current[0];
           const valueDiff = next[1] - current[1];
           
-          // Only add transition if there's a value change (> 1%)
-          if (Math.abs(valueDiff) > 0.01) {
-            // More steps = more spread out, smoother curve
-            const steps = 8;
+          // Only add transition if there's a value change (> 0.5%)
+          if (Math.abs(valueDiff) > 0.005) {
+            // Scale steps based on time gap - more time = more interpolation points
+            // This keeps curves looking smooth even in longer time ranges
+            const baseSteps = 12;
+            const timeScale = Math.max(1, Math.min(5, timeDiff / ONE_HOUR));
+            const steps = Math.round(baseSteps * timeScale);
+            
             for (let s = 1; s <= steps; s++) {
               const t = s / (steps + 1);
-              // Smoother S-curve easing (sine-based)
+              // Smooth S-curve easing (sine-based) for natural flow
               const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
               
               result.push([
