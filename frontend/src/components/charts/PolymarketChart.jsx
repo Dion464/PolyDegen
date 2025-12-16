@@ -205,7 +205,7 @@ const PolymarketChart = ({
       else point.no = lastNo;
     });
 
-    // Add smooth interpolation points between data for rounder curves
+    // Add smooth interpolation points between ALL data points for rounder curves
     if (sorted.length < 2) return sorted;
     
     const interpolated = [];
@@ -219,20 +219,19 @@ const PolymarketChart = ({
         const yesDiff = (next.yes || 0) - (current.yes || 0);
         const noDiff = (next.no || 0) - (current.no || 0);
         
-        // Add interpolation points if there's a significant change
-        if (Math.abs(yesDiff) > 3 || Math.abs(noDiff) > 3) {
-          // Add 4 intermediate points with easing
-          for (let j = 1; j <= 4; j++) {
-            const t = j / 5;
-            // Smooth S-curve easing
-            const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
-            
-            interpolated.push({
-              timestamp: current.timestamp + timeDiff * t,
-              yes: (current.yes || 0) + yesDiff * eased,
-              no: (current.no || 0) + noDiff * eased
-            });
-          }
+        // ALWAYS add interpolation points between every pair of data points
+        // This ensures smooth curves at ALL zoom levels
+        const steps = 6; // More steps = smoother curves
+        for (let j = 1; j <= steps; j++) {
+          const t = j / (steps + 1);
+          // Smooth S-curve easing for natural rounded transitions
+          const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
+          
+          interpolated.push({
+            timestamp: current.timestamp + timeDiff * t,
+            yes: (current.yes || 0) + yesDiff * eased,
+            no: (current.no || 0) + noDiff * eased
+          });
         }
       }
     }
