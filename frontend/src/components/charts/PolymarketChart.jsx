@@ -205,7 +205,39 @@ const PolymarketChart = ({
       else point.no = lastNo;
     });
 
-    return sorted;
+    // Add smooth interpolation points between data for rounder curves
+    if (sorted.length < 2) return sorted;
+    
+    const interpolated = [];
+    for (let i = 0; i < sorted.length; i++) {
+      const current = sorted[i];
+      interpolated.push(current);
+      
+      if (i < sorted.length - 1) {
+        const next = sorted[i + 1];
+        const timeDiff = next.timestamp - current.timestamp;
+        const yesDiff = (next.yes || 0) - (current.yes || 0);
+        const noDiff = (next.no || 0) - (current.no || 0);
+        
+        // Add interpolation points if there's a significant change
+        if (Math.abs(yesDiff) > 3 || Math.abs(noDiff) > 3) {
+          // Add 4 intermediate points with easing
+          for (let j = 1; j <= 4; j++) {
+            const t = j / 5;
+            // Smooth S-curve easing
+            const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
+            
+            interpolated.push({
+              timestamp: current.timestamp + timeDiff * t,
+              yes: (current.yes || 0) + yesDiff * eased,
+              no: (current.no || 0) + noDiff * eased
+            });
+          }
+        }
+      }
+    }
+
+    return interpolated;
   }, [yesSeries, noSeries, aggregatedSeries, selectedRange]);
 
   const hasData = chartData.length > 0;
@@ -238,13 +270,13 @@ const PolymarketChart = ({
     const timeRange = chartData.length > 1 
       ? chartData[chartData.length - 1].timestamp - chartData[0].timestamp 
       : 0;
-    const oneDay = 24 * 60 * 60 * 1000;
-    const oneWeek = 7 * oneDay;
-
-    if (timeRange <= oneDay) {
-      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    }
-    if (timeRange <= oneWeek) {
+            const oneDay = 24 * 60 * 60 * 1000;
+            const oneWeek = 7 * oneDay;
+            
+            if (timeRange <= oneDay) {
+              return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            }
+            if (timeRange <= oneWeek) {
       return `${date.toLocaleString('default', { month: 'short' })} ${date.getDate()}`;
     }
     return `${date.toLocaleString('default', { month: 'short' })} ${date.getDate()}`;
@@ -356,34 +388,34 @@ const PolymarketChart = ({
             />
             <Tooltip content={<CustomTooltip />} />
             
-            {/* YES Line - smooth monotone curve */}
+            {/* YES Line - natural spline for smooth rounded curves */}
             {(!splitLines || selectedSide === 'yes') && (
               <Line
-                type="monotone"
+                type="natural"
                 dataKey="yes"
                 name="YES"
                 stroke={accentYes}
                 strokeWidth={2.5}
                 dot={false}
-                activeDot={{ r: 4, fill: accentYes, stroke: '#000', strokeWidth: 2 }}
+                activeDot={{ r: 5, fill: accentYes, stroke: '#000', strokeWidth: 2 }}
                 style={{
-                  filter: `drop-shadow(0 0 8px ${accentYes}66)`
+                  filter: `drop-shadow(0 0 10px ${accentYes}88)`
                 }}
               />
             )}
             
-            {/* NO Line - smooth monotone curve */}
+            {/* NO Line - natural spline for smooth rounded curves */}
             {(!splitLines || selectedSide === 'no') && (
               <Line
-                type="monotone"
+                type="natural"
                 dataKey="no"
                 name="NO"
                 stroke={accentNo}
                 strokeWidth={2.5}
                 dot={false}
-                activeDot={{ r: 4, fill: accentNo, stroke: '#fff', strokeWidth: 2 }}
+                activeDot={{ r: 5, fill: accentNo, stroke: '#fff', strokeWidth: 2 }}
                 style={{
-                  filter: `drop-shadow(0 0 8px ${accentNo}66)`
+                  filter: `drop-shadow(0 0 10px ${accentNo}88)`
                 }}
               />
             )}
