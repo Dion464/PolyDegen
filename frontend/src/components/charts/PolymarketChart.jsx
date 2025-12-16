@@ -230,27 +230,38 @@ const PolymarketChart = ({
     // Build series based on split mode
     const series = [];
     
-    // Create smooth line config - NO area fill, clean line only
+    // Create rounder/clearer lines (only line styling changes)
     const createLineSeries = (name, color, data) => ({
       name,
       type: 'line',
-      smooth: 0.3, // Subtle smoothing like Polymarket
+      smooth: 0.45, // Rounder curve (less "squarish" joints)
       symbol: 'none',
       showSymbol: false,
       sampling: 'lttb',
       connectNulls: true,
       lineStyle: {
-        width: 2,
+        width: 2.5,
         color: color,
         type: 'solid',
         cap: 'round',
-        join: 'round'
+        join: 'round',
+        // Subtle glow for readability on dark background
+        shadowBlur: 10,
+        shadowColor: hexToRgba(color, 0.45),
+        shadowOffsetX: 0,
+        shadowOffsetY: 0,
+        opacity: 0.95
       },
       // NO area fill - clean line only
       areaStyle: undefined,
       emphasis: {
         focus: 'series',
-        lineStyle: { width: 2.5 }
+        lineStyle: {
+          width: 3,
+          shadowBlur: 14,
+          shadowColor: hexToRgba(color, 0.65),
+          opacity: 1
+        }
       },
       data
     });
@@ -423,6 +434,12 @@ const PolymarketChart = ({
     };
   }, [accentNo, accentYes, hasData, noLineData, yesLineData, selectedSide, splitLines, selectedRange]);
 
+  // Check if we only have current price fallback (2 points with same value = flat line)
+  const hasOnlyFallback = hasData && 
+    yesSeries.length === 2 && 
+    yesSeries[0][1] === yesSeries[1][1] &&
+    (yesPriceHistory.length === 0 && noPriceHistory.length === 0 && priceHistory.length === 0);
+
   if (!hasData || !chartOptions) {
     return (
       <div
@@ -432,8 +449,7 @@ const PolymarketChart = ({
         <svg className="w-8 h-8 mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
-        <p className="text-sm">No price history available</p>
-        <p className="text-xs text-white/40 mt-1">Trade on this market to generate price data</p>
+        <p className="text-sm">Loading price data...</p>
       </div>
     );
   }

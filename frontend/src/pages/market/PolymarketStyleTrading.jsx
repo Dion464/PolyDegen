@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 
 import { useParams, useHistory } from 'react-router-dom';
 import Web3TradingInterface from '../../components/trading/Web3TradingInterface';
 
-// Lazy load the chart component (827KB charts library)
+
 const PolymarketChart = lazy(() => import('../../components/charts/PolymarketChart'));
 
 // Chart loading fallback
@@ -110,8 +110,8 @@ const PolymarketStyleTrading = () => {
   const currencySymbol = getCurrencySymbol(chainId);
   const resolveApiBase = () => {
     const envBase = import.meta.env.VITE_API_BASE_URL;
-    const isLocal8080 = envBase && /localhost:8080|127\.0\.0\.1:8080/i.test(envBase);
-    if (envBase && !isLocal8080) {
+    // If explicitly provided, always honor it (dev often runs API on :8080 while Vite runs on :5173)
+    if (envBase) {
       return envBase;
     }
     if (typeof window !== 'undefined' && window.location?.origin) {
@@ -503,6 +503,18 @@ const PolymarketStyleTrading = () => {
     fetchMarketDataRef.current = fetchMarketData;
   }, [fetchMarketData]);
 
+  // Keep price history fresh without forcing a full market reload
+  useEffect(() => {
+    if (!marketId || !API_BASE) return;
+
+    // 1s refresh for chart data (matches the "every second" requirement)
+    const priceInterval = setInterval(() => {
+      fetchPriceHistoryFromDb(timeframe);
+    }, 1000);
+
+    return () => clearInterval(priceInterval);
+  }, [marketId, API_BASE, timeframe, fetchPriceHistoryFromDb]);
+
   useEffect(() => {
     if (!marketId) return;
     
@@ -610,11 +622,11 @@ const PolymarketStyleTrading = () => {
     };
   }, [contracts?.predictionMarket, marketId, isConnected, refreshAllData, recordPriceSnapshot]);
 
-  // Initial price fetch only (events handle real-time updates)
+  // Initial price fetch and record (events handle real-time updates)
   useEffect(() => {
     if (!isConnected || !contracts?.predictionMarket || !marketId) return;
 
-    const fetchInitialPrices = async () => {
+    const fetchAndRecordPrices = async () => {
       try {
         const yesPrice = await contracts.predictionMarket.getCurrentPrice(marketId, true);
         const noPrice = await contracts.predictionMarket.getCurrentPrice(marketId, false);
@@ -630,18 +642,21 @@ const PolymarketStyleTrading = () => {
           noPrice: noPriceCents,
           currentProbability: yesPriceBps / 10000
         } : prev);
+
+        // Record price snapshot to build history (runs in background)
+        recordPriceSnapshot(yesPriceBps, noPriceBps, null).catch(() => {});
       } catch (err) {
         // Silent fail - events will update prices
       }
     };
 
-    fetchInitialPrices();
+    fetchAndRecordPrices();
 
-    // Fallback: poll every 5 minutes as safety net
-    const fallbackInterval = setInterval(fetchInitialPrices, 300000);
+    // Record price every 5 minutes to build history
+    const priceRecordInterval = setInterval(fetchAndRecordPrices, 300000);
     
-    return () => clearInterval(fallbackInterval);
-  }, [isConnected, contracts?.predictionMarket, marketId]);
+    return () => clearInterval(priceRecordInterval);
+  }, [isConnected, contracts?.predictionMarket, marketId, recordPriceSnapshot]);
 
   // Periodic refresh of DB-backed data (price history) - events trigger immediate refresh
   useEffect(() => {
