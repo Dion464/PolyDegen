@@ -64,19 +64,9 @@ const sanitizeHistory = (history = []) =>
     .filter(Boolean)
     .sort((a, b) => a[0] - b[0]);
 
-const buildSeries = (history = [], fallbackPrice) => {
-  const sanitized = sanitizeHistory(history);
-  
-  // Only use fallback if NO real data exists
-  if (!sanitized.length && fallbackPrice !== undefined && fallbackPrice !== null) {
-    const fallbackNormalized = normalizePrice(
-      fallbackPrice > 1 ? fallbackPrice / 100 : fallbackPrice
-    );
-    if (fallbackNormalized !== null) {
-      return [[Date.now(), fallbackNormalized]];
-    }
-  }
-  return sanitized;
+const buildSeries = (history = []) => {
+  // Only return REAL data from database - no fake fallbacks
+  return sanitizeHistory(history);
 };
 
 const parseRangeValue = (value = '') => {
@@ -104,17 +94,18 @@ const PolymarketChart = ({
   ranges = DEFAULT_RANGES,
   title = 'Price History'
 }) => {
-  const [selectedSide, setSelectedSide] = useState('yes');
+  const [splitLines, setSplitLines] = useState(false); // false = show both lines together
+  const [selectedSide, setSelectedSide] = useState('yes'); // only used when splitLines is true
 
-  // Build series from REAL data only - no interpolation
+  // Build series from REAL data only - no fake fallbacks
   const yesSeries = useMemo(
-    () => buildSeries(yesPriceHistory, currentYesPrice),
-    [yesPriceHistory, currentYesPrice]
+    () => buildSeries(yesPriceHistory),
+    [yesPriceHistory]
   );
 
   const noSeries = useMemo(
-    () => buildSeries(noPriceHistory, currentNoPrice),
-    [noPriceHistory, currentNoPrice]
+    () => buildSeries(noPriceHistory),
+    [noPriceHistory]
   );
 
   const aggregatedSeries = useMemo(() => sanitizeHistory(priceHistory), [priceHistory]);
@@ -190,9 +181,10 @@ const PolymarketChart = ({
       }
     }
 
-    // Format data and filter by time range
-    const formatSeriesData = (lineData, fallbackPrice = null) => {
-      let filtered = lineData
+    // Format data and filter by time range - use REAL data only, no fake points
+    const formatSeriesData = (lineData) => {
+      // Filter by time range and convert to chart format
+      const filtered = lineData
         .filter(([ts]) => timeCutoff === 0 || ts >= timeCutoff)
         .map(([ts, value]) => {
           const rawPercent = Number(value || 0) * 100;
@@ -202,42 +194,13 @@ const PolymarketChart = ({
           };
         });
       
-      // If only 1 point or no points in range, but we have data, create a line
-      if (filtered.length <= 1 && lineData.length > 0) {
-        // Get the most recent value from all data
-        const lastPoint = lineData[lineData.length - 1];
-        const lastValue = Number(lastPoint[1] || 0) * 100;
-        
-        // Use fallback price if available
-        const displayValue = filtered.length === 1 ? filtered[0].actual : 
-                            (fallbackPrice !== null ? Number(fallbackPrice) * 100 : lastValue);
-        
-        // Create start point at cutoff time (or earliest data time for 'all')
-        const startTime = timeCutoff > 0 ? timeCutoff : (lineData[0]?.[0] || now - 86400000);
-        const endTime = now;
-        
-        filtered = [
-          { value: [startTime, displayValue], actual: displayValue },
-          { value: [endTime, displayValue], actual: displayValue }
-        ];
-      } else if (filtered.length > 0) {
-        // Extend line to current time with last known value
-        const lastFiltered = filtered[filtered.length - 1];
-        if (lastFiltered.value[0] < now - 60000) { // If last point is more than 1 min old
-          filtered.push({
-            value: [now, lastFiltered.actual],
-            actual: lastFiltered.actual
-          });
-        }
-      }
-      
       return filtered;
     };
 
-    const yesData = formatSeriesData(yesLineData, currentYesPrice);
-    const noData = formatSeriesData(noLineData, currentNoPrice);
+    const yesData = formatSeriesData(yesLineData);
+    const noData = formatSeriesData(noLineData);
 
-    // If no data at all, show empty state
+    // If no real data, return null to show "no data" message instead of fake flat lines
     if (yesData.length === 0 && noData.length === 0) {
       return null;
     }
@@ -256,18 +219,6 @@ const PolymarketChart = ({
     const minTime = timeCutoff > 0 ? timeCutoff : dataMinTime;
     const maxTime = Math.max(dataMaxTime, now); // Always extend to now
 
-    const latestYes = yesData.length ? yesData[yesData.length - 1].actual : 0;
-    const latestNo = noData.length ? noData[noData.length - 1].actual : 0;
-
-    // Show only the selected side
-    const activeSeries = selectedSide === 'yes' && yesData.length
-      ? { key: 'YES', color: accentYes, data: yesData, latest: latestYes }
-      : noData.length
-      ? { key: 'NO', color: accentNo, data: noData, latest: latestNo }
-      : null;
-
-    if (!activeSeries) return null;
-
     // Convert hex to rgba for area fill
     const hexToRgba = (hex, alpha) => {
       const r = parseInt(hex.slice(1, 3), 16);
@@ -276,41 +227,59 @@ const PolymarketChart = ({
       return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     };
 
-    // Smooth curved line with YES/NO colors - high tension for rounded curves
-    const series = [
-      {
-        name: activeSeries.key,
-        type: 'line',
-        smooth: 0.6, // Higher value = more rounded curves
-        symbol: 'none',
-        showSymbol: false,
-        sampling: 'lttb',
-        connectNulls: true,
-        lineStyle: {
-          width: 2.5,
-          color: activeSeries.color,
-          type: 'solid',
-          cap: 'round',
-          join: 'round'
-        },
-        // Area fill matching line color
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: hexToRgba(activeSeries.color, 0.15) },
-              { offset: 1, color: hexToRgba(activeSeries.color, 0.02) }
-            ]
-          }
-        },
-        emphasis: {
-          focus: 'series',
-          lineStyle: { width: 3 }
-        },
-        data: activeSeries.data
+    // Build series based on split mode
+    const series = [];
+    
+    // Create smooth line config - NO area fill, clean line only
+    const createLineSeries = (name, color, data) => ({
+      name,
+      type: 'line',
+      smooth: 0.3, // Subtle smoothing like Polymarket
+      symbol: 'none',
+      showSymbol: false,
+      sampling: 'lttb',
+      connectNulls: true,
+      lineStyle: {
+        width: 2,
+        color: color,
+        type: 'solid',
+        cap: 'round',
+        join: 'round'
+      },
+      // NO area fill - clean line only
+      areaStyle: undefined,
+      emphasis: {
+        focus: 'series',
+        lineStyle: { width: 2.5 }
+      },
+      data
+    });
+
+    if (splitLines === true) {
+      // SPLIT MODE: Show ONLY the selected side
+      if (selectedSide === 'yes') {
+        if (yesData.length > 0) {
+          series.push(createLineSeries('YES', accentYes, yesData));
+        }
+      } else if (selectedSide === 'no') {
+        if (noData.length > 0) {
+          series.push(createLineSeries('NO', accentNo, noData));
+        }
       }
-    ];
+    } else {
+      // DEFAULT: Show both lines together
+      if (yesData.length > 0) {
+        series.push(createLineSeries('YES', accentYes, yesData));
+      }
+      if (noData.length > 0) {
+        series.push(createLineSeries('NO', accentNo, noData));
+      }
+    }
+
+    if (series.length === 0) return null;
+    
+    // Determine active color for tooltip border (YES takes priority)
+    const activeColor = series[0]?.lineStyle?.color || accentYes;
 
     return {
       backgroundColor: 'transparent',
@@ -326,7 +295,7 @@ const PolymarketChart = ({
       tooltip: {
         trigger: 'axis',
         backgroundColor: 'rgba(20, 20, 20, 0.95)',
-        borderColor: hexToRgba(activeSeries.color, 0.5),
+        borderColor: hexToRgba(activeColor, 0.5),
         borderWidth: 1,
         padding: [10, 14],
         textStyle: {
@@ -358,7 +327,7 @@ const PolymarketChart = ({
         axisPointer: {
           type: 'line',
           lineStyle: {
-            color: hexToRgba(activeSeries.color, 0.5),
+            color: hexToRgba(activeColor, 0.5),
             type: 'dashed',
             width: 1
           }
@@ -370,12 +339,21 @@ const PolymarketChart = ({
             month: 'short', day: 'numeric', year: 'numeric',
             hour: 'numeric', minute: '2-digit', hour12: true 
           });
-          const value = params[0].value[1];
-          const textColor = activeSeries.key === 'YES' ? '#000' : '#fff';
-          return `<div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-bottom: 6px;">${dateStr}</div>
-                  <div style="display: inline-block; padding: 4px 10px; border-radius: 4px; background: ${activeSeries.color}; color: ${textColor}; font-weight: 600; font-size: 14px;">
-                    ${activeSeries.key} ${Number(value).toFixed(1)}%
+          
+          // Build tooltip for all visible series
+          let content = `<div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-bottom: 6px;">${dateStr}</div>`;
+          
+          params.forEach(param => {
+            const seriesName = param.seriesName;
+            const value = param.value[1];
+            const color = seriesName === 'YES' ? '#FFE600' : '#7C3AED';
+            const textColor = seriesName === 'YES' ? '#000' : '#fff';
+            content += `<div style="display: inline-block; padding: 4px 10px; border-radius: 4px; background: ${color}; color: ${textColor}; font-weight: 600; font-size: 14px; margin-right: 6px;">
+                    ${seriesName} ${Number(value).toFixed(1)}%
                   </div>`;
+          });
+          
+          return content;
         }
       },
       legend: { show: false },
@@ -393,6 +371,22 @@ const PolymarketChart = ({
           margin: 14,
           formatter: function(value) {
             const date = new Date(value);
+            const timeRange = maxTime - minTime;
+            const oneDay = 24 * 60 * 60 * 1000;
+            const oneWeek = 7 * oneDay;
+            
+            // Show time for ranges <= 1 day
+            if (timeRange <= oneDay) {
+              return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            }
+            // Show day + time for ranges <= 1 week
+            if (timeRange <= oneWeek) {
+              const month = date.toLocaleString('default', { month: 'short' });
+              const day = date.getDate();
+              const time = date.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
+              return `${month} ${day}\n${time}`;
+            }
+            // Show month + day for longer ranges
             const month = date.toLocaleString('default', { month: 'short' });
             const day = date.getDate();
             return `${month} ${day}`;
@@ -427,29 +421,54 @@ const PolymarketChart = ({
       },
       series
     };
-  }, [accentNo, accentYes, hasData, noLineData, yesLineData, selectedSide]);
+  }, [accentNo, accentYes, hasData, noLineData, yesLineData, selectedSide, splitLines, selectedRange]);
 
   if (!hasData || !chartOptions) {
     return (
       <div
-        className="glass-card flex items-center justify-center rounded-[16px] sm:rounded-[24px] border border-white/20 backdrop-blur-xl text-xs sm:text-sm text-white/60 p-4"
+        className="glass-card flex flex-col items-center justify-center rounded-[16px] sm:rounded-[24px] border border-white/20 backdrop-blur-xl text-white/60 p-4"
         style={{ height: typeof height === 'number' ? Math.max(150, height * 0.7) : height, background: 'rgba(12,12,12,0.55)' }}
       >
-        No price data available yet
+        <svg className="w-8 h-8 mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+        <p className="text-sm">No price history available</p>
+        <p className="text-xs text-white/40 mt-1">Trade on this market to generate price data</p>
       </div>
     );
   }
 
   const renderControls = () => (
     <div className="mb-2 sm:mb-3 flex flex-wrap items-center justify-between gap-2">
-      {/* YES/NO Toggle Buttons */}
-      <div className="flex items-center gap-1.5 sm:gap-2 bg-white/5 backdrop-blur-md rounded-full p-0.5 sm:p-1 border border-white/10">
+      {/* Left side: Line selection buttons */}
+      <div className="flex items-center gap-1 sm:gap-1.5 bg-white/5 backdrop-blur-md rounded-full p-0.5 sm:p-1 border border-white/10">
+        {/* Both lines button (default) */}
         <button
-          onClick={() => setSelectedSide('yes')}
+          onClick={() => {
+            setSplitLines(false);
+          }}
           className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full transition-all text-[10px] sm:text-xs font-semibold ${
-            selectedSide === 'yes'
+            !splitLines
+              ? 'bg-white/20 text-white'
+              : 'text-white/50 hover:text-white hover:bg-white/10'
+          }`}
+          style={{
+            fontFamily: 'gilroy, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+          }}
+        >
+          Both
+        </button>
+
+        {/* YES only button */}
+        <button
+          onClick={() => {
+            setSplitLines(true);
+            setSelectedSide('yes');
+          }}
+          className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full transition-all text-[10px] sm:text-xs font-semibold ${
+            splitLines && selectedSide === 'yes'
               ? 'bg-[#FFE600] text-black'
-              : 'text-white/60 hover:text-white'
+              : 'text-white/50 hover:text-white hover:bg-white/10'
           }`}
           style={{
             fontFamily: 'gilroy, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
@@ -457,12 +476,17 @@ const PolymarketChart = ({
         >
           YES
         </button>
+
+        {/* NO only button */}
         <button
-          onClick={() => setSelectedSide('no')}
+          onClick={() => {
+            setSplitLines(true);
+            setSelectedSide('no');
+          }}
           className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full transition-all text-[10px] sm:text-xs font-semibold ${
-            selectedSide === 'no'
+            splitLines && selectedSide === 'no'
               ? 'bg-[#7C3AED] text-white'
-              : 'text-white/60 hover:text-white'
+              : 'text-white/50 hover:text-white hover:bg-white/10'
           }`}
           style={{
             fontFamily: 'gilroy, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
@@ -503,7 +527,13 @@ const PolymarketChart = ({
       {renderControls()}
       <div className="overflow-hidden rounded-[12px] sm:rounded-[16px]" style={{ height: typeof height === 'number' ? Math.max(180, height * 0.8) : height }}>
         {chartOptions ? (
-          <ReactECharts option={chartOptions} style={{ height: '100%', width: '100%' }} />
+          <ReactECharts 
+            key={`${splitLines}-${selectedSide}-${selectedRange}`}
+            option={chartOptions} 
+            style={{ height: '100%', width: '100%' }}
+            notMerge={true}
+            lazyUpdate={false}
+          />
         ) : (
           <div className="h-full flex items-center justify-center text-white/40 text-sm" style={{ fontFamily: 'gilroy, sans-serif' }}>
             <div className="text-center">
