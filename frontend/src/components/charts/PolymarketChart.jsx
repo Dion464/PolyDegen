@@ -181,7 +181,44 @@ const PolymarketChart = ({
       }
     }
 
-    // Format data and filter by time range - keep it simple, let ECharts handle smoothing
+    // Add smooth, spread-out transitions between data points
+    const smoothTransitions = (data) => {
+      if (!data || data.length < 2) return data;
+      
+      const result = [];
+      
+      for (let i = 0; i < data.length; i++) {
+        const current = data[i];
+        result.push(current);
+        
+        // If there's a next point, add transition points
+        if (i < data.length - 1) {
+          const next = data[i + 1];
+          const timeDiff = next[0] - current[0];
+          const valueDiff = next[1] - current[1];
+          
+          // Only add transition if there's a value change (> 1%)
+          if (Math.abs(valueDiff) > 0.01) {
+            // More steps = more spread out, smoother curve
+            const steps = 8;
+            for (let s = 1; s <= steps; s++) {
+              const t = s / (steps + 1);
+              // Smoother S-curve easing (sine-based)
+              const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
+              
+              result.push([
+                current[0] + timeDiff * t,
+                current[1] + valueDiff * eased
+              ]);
+            }
+          }
+        }
+      }
+      
+      return result;
+    };
+
+    // Format data and filter by time range
     const formatSeriesData = (lineData) => {
       // Filter by time range
       const filtered = lineData
@@ -189,8 +226,11 @@ const PolymarketChart = ({
       
       if (filtered.length === 0) return [];
       
-      // Convert to chart format - no manual interpolation needed
-      return filtered.map(([ts, value]) => {
+      // Add smooth transition points between data
+      const smoothed = smoothTransitions(filtered);
+      
+      // Convert to chart format
+      return smoothed.map(([ts, value]) => {
         const rawPercent = Number(value || 0) * 100;
         return {
           value: [ts, rawPercent],
@@ -232,13 +272,13 @@ const PolymarketChart = ({
     // Build series based on split mode
     const series = [];
     
-    // Create smooth, clean lines with maximum ECharts smoothing
+    // Create smooth, clean lines with high smoothing
     const createLineSeries = (name, color, data) => ({
       name,
       type: 'line',
-      smooth: 0.5, // 0.5 = very smooth bezier curves (0 = straight, 1 = max smooth)
+      smooth: 0.9, // High bezier smoothing for rounded curves
       symbol: 'circle',
-      symbolSize: 0, // Hide symbols but keep them for tooltip detection
+      symbolSize: 0,
       showSymbol: false,
       sampling: 'lttb',
       connectNulls: true,
@@ -249,7 +289,6 @@ const PolymarketChart = ({
         type: 'solid',
         cap: 'round',
         join: 'round',
-        // Glow effect for visibility
         shadowBlur: 14,
         shadowColor: hexToRgba(color, 0.55),
         shadowOffsetX: 0,
