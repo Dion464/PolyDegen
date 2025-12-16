@@ -181,73 +181,7 @@ const PolymarketChart = ({
       }
     }
 
-    // Catmull-Rom spline interpolation for truly smooth curves
-    const catmullRomSpline = (p0, p1, p2, p3, t) => {
-      const t2 = t * t;
-      const t3 = t2 * t;
-      return 0.5 * (
-        (2 * p1) +
-        (-p0 + p2) * t +
-        (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
-        (-p0 + 3 * p1 - 3 * p2 + p3) * t3
-      );
-    };
-
-    // Create smooth interpolated data using spline
-    const createSmoothData = (data) => {
-      if (data.length < 2) return data;
-      if (data.length === 2) {
-        // Just 2 points - add some intermediate points with easing
-        const [ts1, val1] = data[0];
-        const [ts2, val2] = data[1];
-        const result = [];
-        const steps = 10;
-        for (let i = 0; i <= steps; i++) {
-          const t = i / steps;
-          // Smooth ease-in-out
-          const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-          result.push([
-            ts1 + (ts2 - ts1) * t,
-            val1 + (val2 - val1) * eased
-          ]);
-        }
-        return result;
-      }
-
-      const result = [];
-      const pointsPerSegment = 8; // More points = smoother curves
-
-      for (let i = 0; i < data.length - 1; i++) {
-        // Get 4 control points for Catmull-Rom
-        const p0 = data[Math.max(0, i - 1)];
-        const p1 = data[i];
-        const p2 = data[i + 1];
-        const p3 = data[Math.min(data.length - 1, i + 2)];
-
-        // Generate interpolated points
-        for (let j = 0; j < pointsPerSegment; j++) {
-          const t = j / pointsPerSegment;
-          
-          // Interpolate timestamp linearly
-          const interpTs = p1[0] + (p2[0] - p1[0]) * t;
-          
-          // Interpolate value using Catmull-Rom spline
-          const interpVal = catmullRomSpline(p0[1], p1[1], p2[1], p3[1], t);
-          
-          // Clamp value between 0 and 1
-          const clampedVal = Math.max(0, Math.min(1, interpVal));
-          
-          result.push([interpTs, clampedVal]);
-        }
-      }
-      
-      // Add the final point
-      result.push(data[data.length - 1]);
-      
-      return result;
-    };
-
-    // Format data and filter by time range
+    // Format data and filter by time range - keep it simple, let ECharts handle smoothing
     const formatSeriesData = (lineData) => {
       // Filter by time range
       const filtered = lineData
@@ -255,11 +189,8 @@ const PolymarketChart = ({
       
       if (filtered.length === 0) return [];
       
-      // Create smooth spline-interpolated data
-      const smoothed = createSmoothData(filtered);
-      
-      // Convert to chart format
-      return smoothed.map(([ts, value]) => {
+      // Convert to chart format - no manual interpolation needed
+      return filtered.map(([ts, value]) => {
         const rawPercent = Number(value || 0) * 100;
         return {
           value: [ts, rawPercent],
@@ -301,12 +232,13 @@ const PolymarketChart = ({
     // Build series based on split mode
     const series = [];
     
-    // Create smooth, clean lines - data is already spline-interpolated
+    // Create smooth, clean lines with maximum ECharts smoothing
     const createLineSeries = (name, color, data) => ({
       name,
       type: 'line',
-      smooth: true, // Enable native smoothing on top of our spline data
-      symbol: 'none',
+      smooth: 0.5, // 0.5 = very smooth bezier curves (0 = straight, 1 = max smooth)
+      symbol: 'circle',
+      symbolSize: 0, // Hide symbols but keep them for tooltip detection
       showSymbol: false,
       sampling: 'lttb',
       connectNulls: true,
