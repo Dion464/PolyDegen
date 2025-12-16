@@ -181,39 +181,40 @@ const PolymarketChart = ({
       }
     }
 
-    // Add smooth, spread-out transitions between data points
-    // Use the ENTIRE time gap for the transition to avoid cramped vertical lines
+    // Add smooth transitions - only when there's a significant value change
     const smoothTransitions = (data) => {
       if (!data || data.length < 2) return data;
       
       const result = [];
+      const maxPoints = 500; // Safety limit
       
       for (let i = 0; i < data.length; i++) {
         const current = data[i];
+        result.push(current);
         
-        // If there's a next point, create smooth transition across the FULL time gap
+        // Safety check
+        if (result.length > maxPoints) break;
+        
         if (i < data.length - 1) {
           const next = data[i + 1];
           const timeDiff = next[0] - current[0];
           const valueDiff = next[1] - current[1];
           
-          // Always add many interpolation points across the full time range
-          // This spreads the curve evenly instead of bunching at edges
-          const steps = 20; // Fixed high number for smooth curves
-          
-          for (let s = 0; s <= steps; s++) {
-            const t = s / steps;
-            // S-curve easing for smooth natural transitions
-            const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
-            
-            result.push([
-              current[0] + timeDiff * t,
-              current[1] + valueDiff * eased
-            ]);
+          // Only interpolate if there's a meaningful change (> 2%)
+          if (Math.abs(valueDiff) > 0.02) {
+            // Add 6 intermediate points with S-curve easing
+            const steps = 6;
+            for (let s = 1; s <= steps; s++) {
+              if (result.length > maxPoints) break;
+              const t = s / (steps + 1);
+              const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
+              
+              result.push([
+                current[0] + timeDiff * t,
+                current[1] + valueDiff * eased
+              ]);
+            }
           }
-        } else {
-          // Last point
-          result.push(current);
         }
       }
       
