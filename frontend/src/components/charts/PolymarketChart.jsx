@@ -205,44 +205,30 @@ const PolymarketChart = ({
       else point.no = lastNo;
     });
 
-    // Add smooth interpolation - but limit total points to avoid lag
+    // ALWAYS add smooth interpolation for rounder curves
     if (sorted.length < 2) return sorted;
-    
-    // Calculate how many interpolation steps based on data size
-    // Fewer original points = more interpolation allowed
-    const maxTotalPoints = 150;
-    const stepsPerSegment = Math.max(1, Math.floor((maxTotalPoints - sorted.length) / sorted.length));
-    
-    // If we already have enough points, skip interpolation
-    if (sorted.length >= maxTotalPoints || stepsPerSegment < 2) {
-      return sorted;
-    }
     
     const interpolated = [];
     for (let i = 0; i < sorted.length; i++) {
       const current = sorted[i];
       interpolated.push(current);
       
-      if (i < sorted.length - 1 && interpolated.length < maxTotalPoints) {
+      if (i < sorted.length - 1) {
         const next = sorted[i + 1];
         const timeDiff = next.timestamp - current.timestamp;
         const yesDiff = (next.yes || 0) - (current.yes || 0);
         const noDiff = (next.no || 0) - (current.no || 0);
         
-        // Only interpolate if there's a meaningful change (> 2%)
-        if (Math.abs(yesDiff) > 2 || Math.abs(noDiff) > 2) {
-          const steps = Math.min(stepsPerSegment, 4);
-          for (let j = 1; j <= steps; j++) {
-            if (interpolated.length >= maxTotalPoints) break;
-            const t = j / (steps + 1);
-            const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
-            
-            interpolated.push({
-              timestamp: current.timestamp + timeDiff * t,
-              yes: (current.yes || 0) + yesDiff * eased,
-              no: (current.no || 0) + noDiff * eased
-            });
-          }
+        // ALWAYS add 3 interpolation points with S-curve easing
+        for (let j = 1; j <= 3; j++) {
+          const t = j / 4;
+          const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
+          
+          interpolated.push({
+            timestamp: current.timestamp + timeDiff * t,
+            yes: (current.yes || 0) + yesDiff * eased,
+            no: (current.no || 0) + noDiff * eased
+          });
         }
       }
     }
@@ -398,10 +384,10 @@ const PolymarketChart = ({
             />
             <Tooltip content={<CustomTooltip />} />
             
-            {/* YES Line - natural spline for smooth rounded curves */}
+            {/* YES Line - basis spline for maximum smooth rounded curves */}
             {(!splitLines || selectedSide === 'yes') && (
               <Line
-                type="natural"
+                type="basis"
                 dataKey="yes"
                 name="YES"
                 stroke={accentYes}
@@ -414,10 +400,10 @@ const PolymarketChart = ({
               />
             )}
             
-            {/* NO Line - natural spline for smooth rounded curves */}
+            {/* NO Line - basis spline for maximum smooth rounded curves */}
             {(!splitLines || selectedSide === 'no') && (
               <Line
-                type="natural"
+                type="basis"
                 dataKey="no"
                 name="NO"
                 stroke={accentNo}
