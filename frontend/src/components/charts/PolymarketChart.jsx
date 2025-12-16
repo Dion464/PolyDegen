@@ -182,42 +182,38 @@ const PolymarketChart = ({
     }
 
     // Add smooth, spread-out transitions between data points
-    // Scale interpolation based on time gap for consistent smoothness at all zoom levels
+    // Use the ENTIRE time gap for the transition to avoid cramped vertical lines
     const smoothTransitions = (data) => {
       if (!data || data.length < 2) return data;
       
       const result = [];
-      const ONE_HOUR = 60 * 60 * 1000;
       
       for (let i = 0; i < data.length; i++) {
         const current = data[i];
-        result.push(current);
         
-        // If there's a next point, add transition points
+        // If there's a next point, create smooth transition across the FULL time gap
         if (i < data.length - 1) {
           const next = data[i + 1];
           const timeDiff = next[0] - current[0];
           const valueDiff = next[1] - current[1];
           
-          // Only add transition if there's a value change (> 0.5%)
-          if (Math.abs(valueDiff) > 0.005) {
-            // Scale steps based on time gap - more time = more interpolation points
-            // This keeps curves looking smooth even in longer time ranges
-            const baseSteps = 12;
-            const timeScale = Math.max(1, Math.min(5, timeDiff / ONE_HOUR));
-            const steps = Math.round(baseSteps * timeScale);
+          // Always add many interpolation points across the full time range
+          // This spreads the curve evenly instead of bunching at edges
+          const steps = 20; // Fixed high number for smooth curves
+          
+          for (let s = 0; s <= steps; s++) {
+            const t = s / steps;
+            // S-curve easing for smooth natural transitions
+            const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
             
-            for (let s = 1; s <= steps; s++) {
-              const t = s / (steps + 1);
-              // Smooth S-curve easing (sine-based) for natural flow
-              const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
-              
-              result.push([
-                current[0] + timeDiff * t,
-                current[1] + valueDiff * eased
-              ]);
-            }
+            result.push([
+              current[0] + timeDiff * t,
+              current[1] + valueDiff * eased
+            ]);
           }
+        } else {
+          // Last point
+          result.push(current);
         }
       }
       
