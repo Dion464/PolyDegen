@@ -205,33 +205,44 @@ const PolymarketChart = ({
       else point.no = lastNo;
     });
 
-    // Add smooth interpolation points between ALL data points for rounder curves
+    // Add smooth interpolation - but limit total points to avoid lag
     if (sorted.length < 2) return sorted;
+    
+    // Calculate how many interpolation steps based on data size
+    // Fewer original points = more interpolation allowed
+    const maxTotalPoints = 150;
+    const stepsPerSegment = Math.max(1, Math.floor((maxTotalPoints - sorted.length) / sorted.length));
+    
+    // If we already have enough points, skip interpolation
+    if (sorted.length >= maxTotalPoints || stepsPerSegment < 2) {
+      return sorted;
+    }
     
     const interpolated = [];
     for (let i = 0; i < sorted.length; i++) {
       const current = sorted[i];
       interpolated.push(current);
       
-      if (i < sorted.length - 1) {
+      if (i < sorted.length - 1 && interpolated.length < maxTotalPoints) {
         const next = sorted[i + 1];
         const timeDiff = next.timestamp - current.timestamp;
         const yesDiff = (next.yes || 0) - (current.yes || 0);
         const noDiff = (next.no || 0) - (current.no || 0);
         
-        // ALWAYS add interpolation points between every pair of data points
-        // This ensures smooth curves at ALL zoom levels
-        const steps = 6; // More steps = smoother curves
-        for (let j = 1; j <= steps; j++) {
-          const t = j / (steps + 1);
-          // Smooth S-curve easing for natural rounded transitions
-          const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
-          
-          interpolated.push({
-            timestamp: current.timestamp + timeDiff * t,
-            yes: (current.yes || 0) + yesDiff * eased,
-            no: (current.no || 0) + noDiff * eased
-          });
+        // Only interpolate if there's a meaningful change (> 2%)
+        if (Math.abs(yesDiff) > 2 || Math.abs(noDiff) > 2) {
+          const steps = Math.min(stepsPerSegment, 4);
+          for (let j = 1; j <= steps; j++) {
+            if (interpolated.length >= maxTotalPoints) break;
+            const t = j / (steps + 1);
+            const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
+            
+            interpolated.push({
+              timestamp: current.timestamp + timeDiff * t,
+              yes: (current.yes || 0) + yesDiff * eased,
+              no: (current.no || 0) + noDiff * eased
+            });
+          }
         }
       }
     }
