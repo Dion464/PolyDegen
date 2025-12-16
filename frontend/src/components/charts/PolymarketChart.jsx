@@ -181,41 +181,67 @@ const PolymarketChart = ({
       }
     }
 
-    // Interpolate data points to create smoother curves
-    // This adds intermediate points between existing data to avoid harsh step-like transitions
-    const interpolateData = (data) => {
+    // Catmull-Rom spline interpolation for truly smooth curves
+    const catmullRomSpline = (p0, p1, p2, p3, t) => {
+      const t2 = t * t;
+      const t3 = t2 * t;
+      return 0.5 * (
+        (2 * p1) +
+        (-p0 + p2) * t +
+        (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+        (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+      );
+    };
+
+    // Create smooth interpolated data using spline
+    const createSmoothData = (data) => {
       if (data.length < 2) return data;
-      
+      if (data.length === 2) {
+        // Just 2 points - add some intermediate points with easing
+        const [ts1, val1] = data[0];
+        const [ts2, val2] = data[1];
+        const result = [];
+        const steps = 10;
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          // Smooth ease-in-out
+          const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+          result.push([
+            ts1 + (ts2 - ts1) * t,
+            val1 + (val2 - val1) * eased
+          ]);
+        }
+        return result;
+      }
+
       const result = [];
+      const pointsPerSegment = 8; // More points = smoother curves
+
       for (let i = 0; i < data.length - 1; i++) {
-        const [ts1, val1] = data[i];
-        const [ts2, val2] = data[i + 1];
-        
-        result.push([ts1, val1]);
-        
-        // Calculate time gap
-        const timeDiff = ts2 - ts1;
-        const valueDiff = Math.abs(val2 - val1);
-        
-        // Only interpolate if there's a significant time gap AND value change
-        // This creates smoother transitions for large jumps
-        if (timeDiff > 3600000 && valueDiff > 0.05) { // > 1 hour gap and > 5% change
-          const numSteps = Math.min(5, Math.ceil(valueDiff / 0.1)); // Up to 5 intermediate points
+        // Get 4 control points for Catmull-Rom
+        const p0 = data[Math.max(0, i - 1)];
+        const p1 = data[i];
+        const p2 = data[i + 1];
+        const p3 = data[Math.min(data.length - 1, i + 2)];
+
+        // Generate interpolated points
+        for (let j = 0; j < pointsPerSegment; j++) {
+          const t = j / pointsPerSegment;
           
-          for (let j = 1; j <= numSteps; j++) {
-            const ratio = j / (numSteps + 1);
-            // Use ease-in-out curve for smoother transitions
-            const easeRatio = ratio < 0.5 
-              ? 2 * ratio * ratio 
-              : 1 - Math.pow(-2 * ratio + 2, 2) / 2;
-            
-            const interpTs = ts1 + timeDiff * ratio;
-            const interpVal = val1 + (val2 - val1) * easeRatio;
-            result.push([interpTs, interpVal]);
-          }
+          // Interpolate timestamp linearly
+          const interpTs = p1[0] + (p2[0] - p1[0]) * t;
+          
+          // Interpolate value using Catmull-Rom spline
+          const interpVal = catmullRomSpline(p0[1], p1[1], p2[1], p3[1], t);
+          
+          // Clamp value between 0 and 1
+          const clampedVal = Math.max(0, Math.min(1, interpVal));
+          
+          result.push([interpTs, clampedVal]);
         }
       }
-      // Add the last point
+      
+      // Add the final point
       result.push(data[data.length - 1]);
       
       return result;
@@ -227,11 +253,13 @@ const PolymarketChart = ({
       const filtered = lineData
         .filter(([ts]) => timeCutoff === 0 || ts >= timeCutoff);
       
-      // Interpolate for smoother curves
-      const interpolated = interpolateData(filtered);
+      if (filtered.length === 0) return [];
+      
+      // Create smooth spline-interpolated data
+      const smoothed = createSmoothData(filtered);
       
       // Convert to chart format
-      return interpolated.map(([ts, value]) => {
+      return smoothed.map(([ts, value]) => {
         const rawPercent = Number(value || 0) * 100;
         return {
           value: [ts, rawPercent],
@@ -273,12 +301,11 @@ const PolymarketChart = ({
     // Build series based on split mode
     const series = [];
     
-    // Create rounder/clearer lines with smooth spline interpolation
+    // Create smooth, clean lines - data is already spline-interpolated
     const createLineSeries = (name, color, data) => ({
       name,
       type: 'line',
-      smooth: 0.6, // Higher smoothing for rounder curves
-      smoothMonotone: 'x', // Maintain monotonic smoothing along X-axis for cleaner look
+      smooth: true, // Enable native smoothing on top of our spline data
       symbol: 'none',
       showSymbol: false,
       sampling: 'lttb',
@@ -290,21 +317,20 @@ const PolymarketChart = ({
         type: 'solid',
         cap: 'round',
         join: 'round',
-        // Subtle glow for readability on dark background
-        shadowBlur: 12,
-        shadowColor: hexToRgba(color, 0.5),
+        // Glow effect for visibility
+        shadowBlur: 14,
+        shadowColor: hexToRgba(color, 0.55),
         shadowOffsetX: 0,
         shadowOffsetY: 0,
         opacity: 1
       },
-      // NO area fill - clean line only
       areaStyle: undefined,
       emphasis: {
         focus: 'series',
         lineStyle: {
-          width: 3,
-          shadowBlur: 16,
-          shadowColor: hexToRgba(color, 0.7),
+          width: 3.5,
+          shadowBlur: 20,
+          shadowColor: hexToRgba(color, 0.75),
           opacity: 1
         }
       },
@@ -349,66 +375,66 @@ const PolymarketChart = ({
         containLabel: true
       },
       tooltip: {
+        show: true,
         trigger: 'axis',
-        backgroundColor: 'rgba(20, 20, 20, 0.95)',
-        borderColor: hexToRgba(activeColor, 0.5),
+        confine: true,
+        backgroundColor: 'rgba(15, 15, 15, 0.96)',
+        borderColor: hexToRgba(activeColor, 0.6),
         borderWidth: 1,
-        padding: [10, 14],
+        borderRadius: 8,
+        padding: [12, 16],
         textStyle: {
           color: '#fff',
           fontSize: 13
         },
-        position: function (point, params, dom, rect, size) {
-          // Keep tooltip inside chart bounds
-          let x = point[0] + 15;
-          let y = point[1] - 50;
-          
-          // If tooltip would go off the right edge, move it to the left of cursor
-          if (x + size.contentSize[0] > size.viewSize[0] - 20) {
-            x = point[0] - size.contentSize[0] - 15;
-          }
-          // If tooltip would go off the left edge
-          if (x < 10) {
-            x = 10;
-          }
-          // Keep tooltip vertically in bounds
-          if (y < 10) {
-            y = 10;
-          }
-          if (y + size.contentSize[1] > size.viewSize[1] - 10) {
-            y = size.viewSize[1] - size.contentSize[1] - 10;
-          }
-          return [x, y];
-        },
+        extraCssText: 'box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 9999;',
         axisPointer: {
-          type: 'line',
+          type: 'cross',
+          crossStyle: {
+            color: 'rgba(255,255,255,0.3)',
+            width: 1,
+            type: 'dashed'
+          },
           lineStyle: {
-            color: hexToRgba(activeColor, 0.5),
-            type: 'dashed',
+            color: hexToRgba(activeColor, 0.6),
+            type: 'solid',
             width: 1
+          },
+          label: {
+            show: false
           }
         },
         formatter: function(params) {
           if (!params || params.length === 0) return '';
-          const date = new Date(params[0].value[0]);
+          
+          // Get the timestamp from first param
+          const timestamp = params[0]?.value?.[0];
+          if (!timestamp) return '';
+          
+          const date = new Date(timestamp);
           const dateStr = date.toLocaleString('en-US', { 
             month: 'short', day: 'numeric', year: 'numeric',
             hour: 'numeric', minute: '2-digit', hour12: true 
           });
           
-          // Build tooltip for all visible series
-          let content = `<div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-bottom: 6px;">${dateStr}</div>`;
+          // Build tooltip content
+          let content = `<div style="font-size: 11px; color: rgba(255,255,255,0.6); margin-bottom: 8px; font-weight: 500;">${dateStr}</div>`;
+          content += `<div style="display: flex; gap: 8px; flex-wrap: wrap;">`;
           
           params.forEach(param => {
-            const seriesName = param.seriesName;
+            if (!param?.value) return;
+            const seriesName = param.seriesName || 'Value';
             const value = param.value[1];
+            if (value === undefined || value === null) return;
+            
             const color = seriesName === 'YES' ? '#FFE600' : '#7C3AED';
             const textColor = seriesName === 'YES' ? '#000' : '#fff';
-            content += `<div style="display: inline-block; padding: 4px 10px; border-radius: 4px; background: ${color}; color: ${textColor}; font-weight: 600; font-size: 14px; margin-right: 6px;">
+            content += `<div style="display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 6px; background: ${color}; color: ${textColor}; font-weight: 600; font-size: 13px;">
                     ${seriesName} ${Number(value).toFixed(1)}%
                   </div>`;
           });
           
+          content += `</div>`;
           return content;
         }
       },
