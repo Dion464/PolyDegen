@@ -181,20 +181,63 @@ const PolymarketChart = ({
       }
     }
 
-    // Format data and filter by time range - use REAL data only, no fake points
-    const formatSeriesData = (lineData) => {
-      // Filter by time range and convert to chart format
-      const filtered = lineData
-        .filter(([ts]) => timeCutoff === 0 || ts >= timeCutoff)
-        .map(([ts, value]) => {
-          const rawPercent = Number(value || 0) * 100;
-          return {
-            value: [ts, rawPercent],
-            actual: rawPercent
-          };
-        });
+    // Interpolate data points to create smoother curves
+    // This adds intermediate points between existing data to avoid harsh step-like transitions
+    const interpolateData = (data) => {
+      if (data.length < 2) return data;
       
-      return filtered;
+      const result = [];
+      for (let i = 0; i < data.length - 1; i++) {
+        const [ts1, val1] = data[i];
+        const [ts2, val2] = data[i + 1];
+        
+        result.push([ts1, val1]);
+        
+        // Calculate time gap
+        const timeDiff = ts2 - ts1;
+        const valueDiff = Math.abs(val2 - val1);
+        
+        // Only interpolate if there's a significant time gap AND value change
+        // This creates smoother transitions for large jumps
+        if (timeDiff > 3600000 && valueDiff > 0.05) { // > 1 hour gap and > 5% change
+          const numSteps = Math.min(5, Math.ceil(valueDiff / 0.1)); // Up to 5 intermediate points
+          
+          for (let j = 1; j <= numSteps; j++) {
+            const ratio = j / (numSteps + 1);
+            // Use ease-in-out curve for smoother transitions
+            const easeRatio = ratio < 0.5 
+              ? 2 * ratio * ratio 
+              : 1 - Math.pow(-2 * ratio + 2, 2) / 2;
+            
+            const interpTs = ts1 + timeDiff * ratio;
+            const interpVal = val1 + (val2 - val1) * easeRatio;
+            result.push([interpTs, interpVal]);
+          }
+        }
+      }
+      // Add the last point
+      result.push(data[data.length - 1]);
+      
+      return result;
+    };
+
+    // Format data and filter by time range
+    const formatSeriesData = (lineData) => {
+      // Filter by time range
+      const filtered = lineData
+        .filter(([ts]) => timeCutoff === 0 || ts >= timeCutoff);
+      
+      // Interpolate for smoother curves
+      const interpolated = interpolateData(filtered);
+      
+      // Convert to chart format
+      return interpolated.map(([ts, value]) => {
+        const rawPercent = Number(value || 0) * 100;
+        return {
+          value: [ts, rawPercent],
+          actual: rawPercent
+        };
+      });
     };
 
     const yesData = formatSeriesData(yesLineData);
@@ -230,15 +273,17 @@ const PolymarketChart = ({
     // Build series based on split mode
     const series = [];
     
-    // Create rounder/clearer lines (only line styling changes)
+    // Create rounder/clearer lines with smooth spline interpolation
     const createLineSeries = (name, color, data) => ({
       name,
       type: 'line',
-      smooth: 0.45, // Rounder curve (less "squarish" joints)
+      smooth: 0.6, // Higher smoothing for rounder curves
+      smoothMonotone: 'x', // Maintain monotonic smoothing along X-axis for cleaner look
       symbol: 'none',
       showSymbol: false,
       sampling: 'lttb',
       connectNulls: true,
+      clip: true,
       lineStyle: {
         width: 2.5,
         color: color,
@@ -246,11 +291,11 @@ const PolymarketChart = ({
         cap: 'round',
         join: 'round',
         // Subtle glow for readability on dark background
-        shadowBlur: 10,
-        shadowColor: hexToRgba(color, 0.45),
+        shadowBlur: 12,
+        shadowColor: hexToRgba(color, 0.5),
         shadowOffsetX: 0,
         shadowOffsetY: 0,
-        opacity: 0.95
+        opacity: 1
       },
       // NO area fill - clean line only
       areaStyle: undefined,
@@ -258,8 +303,8 @@ const PolymarketChart = ({
         focus: 'series',
         lineStyle: {
           width: 3,
-          shadowBlur: 14,
-          shadowColor: hexToRgba(color, 0.65),
+          shadowBlur: 16,
+          shadowColor: hexToRgba(color, 0.7),
           opacity: 1
         }
       },
