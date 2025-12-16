@@ -1,5 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import ReactECharts from 'echarts-for-react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine
+} from 'recharts';
 import '../../pages/market/MarketDetailGlass.css';
 
 const DEFAULT_RANGES = [
@@ -11,15 +19,13 @@ const DEFAULT_RANGES = [
   { label: 'ALL', value: 'all' }
 ];
 
-// Normalize price to 0-1 range (NO artificial clamping)
+// Normalize price to 0-1 range
 const normalizePrice = (raw) => {
   if (raw === undefined || raw === null) return null;
   const numeric = Number(raw);
   if (!Number.isFinite(numeric)) return null;
-  
-  // If value is > 1.5, assume it's in percentage or basis points
-  if (numeric > 100) return numeric / 10000; // basis points
-  if (numeric > 1.5) return numeric / 100; // percentage
+  if (numeric > 100) return numeric / 10000;
+  if (numeric > 1.5) return numeric / 100;
   if (numeric < 0) return 0;
   if (numeric > 1) return 1;
   return numeric;
@@ -33,14 +39,12 @@ const resolveTimestamp = (point = {}) => {
     (point.blockTimestamp ? Number(point.blockTimestamp) * 1000 : null) ||
     (point.block_time ? Number(point.block_time) * 1000 : null) ||
     point.time;
-
   if (!candidate) return NaN;
   const ts = new Date(candidate).getTime();
   return Number.isFinite(ts) ? ts : NaN;
 };
 
 const resolvePrice = (point = {}) => {
-  // Handle yesPriceBps directly (from database)
   if (point.yesPriceBps !== undefined) return point.yesPriceBps / 10000;
   if (point.noPriceBps !== undefined) return point.noPriceBps / 10000;
   if (point.price !== undefined) return point.price;
@@ -52,22 +56,16 @@ const resolvePrice = (point = {}) => {
   return undefined;
 };
 
-// Only use REAL data from database - no interpolation
 const sanitizeHistory = (history = []) =>
   history
     .map((point) => {
       const timestamp = resolveTimestamp(point);
       const price = normalizePrice(resolvePrice(point));
       if (!Number.isFinite(timestamp) || price === null) return null;
-      return [timestamp, price];
+      return { timestamp, price };
     })
     .filter(Boolean)
-    .sort((a, b) => a[0] - b[0]);
-
-const buildSeries = (history = []) => {
-  // Only return REAL data from database - no fake fallbacks
-  return sanitizeHistory(history);
-};
+    .sort((a, b) => a.timestamp - b.timestamp);
 
 const parseRangeValue = (value = '') => {
   const lower = value.toLowerCase();
@@ -80,65 +78,144 @@ const parseRangeValue = (value = '') => {
   return { type: unitMap[unit] || 'day', count };
 };
 
+// Custom tooltip component
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload || payload.length === 0) return null;
+  
+  const date = new Date(label);
+  const dateStr = date.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true
+  });
+
+  return (
+    <div style={{
+      background: 'rgba(15, 15, 15, 0.96)',
+      border: '1px solid rgba(255,255,255,0.2)',
+      borderRadius: '8px',
+      padding: '12px 16px',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+    }}>
+      <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '8px' }}>
+        {dateStr}
+      </div>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        {payload.map((entry, idx) => (
+          <div
+            key={idx}
+            style={{
+              padding: '5px 12px',
+              borderRadius: '6px',
+              background: entry.color,
+              color: entry.name === 'YES' ? '#000' : '#fff',
+              fontWeight: 600,
+              fontSize: '13px'
+            }}
+          >
+            {entry.name} {Number(entry.value).toFixed(1)}%
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const PolymarketChart = ({
   priceHistory = [],
   yesPriceHistory = [],
   noPriceHistory = [],
   currentYesPrice = 0.5,
   currentNoPrice = 0.5,
-  accentYes = '#FFE600', // Yellow for YES
-  accentNo = '#7C3AED',  // Purple for NO
+  accentYes = '#FFE600',
+  accentNo = '#7C3AED',
   height = 320,
   selectedRange = 'all',
   onRangeChange = () => {},
   ranges = DEFAULT_RANGES,
   title = 'Price History'
 }) => {
-  const [splitLines, setSplitLines] = useState(false); // false = show both lines together
-  const [selectedSide, setSelectedSide] = useState('yes'); // only used when splitLines is true
+  const [splitLines, setSplitLines] = useState(false);
+  const [selectedSide, setSelectedSide] = useState('yes');
 
-  // Build series from REAL data only - no fake fallbacks
-  const yesSeries = useMemo(
-    () => buildSeries(yesPriceHistory),
-    [yesPriceHistory]
-  );
-
-  const noSeries = useMemo(
-    () => buildSeries(noPriceHistory),
-    [noPriceHistory]
-  );
-
+  // Process data
+  const yesSeries = useMemo(() => sanitizeHistory(yesPriceHistory), [yesPriceHistory]);
+  const noSeries = useMemo(() => sanitizeHistory(noPriceHistory), [noPriceHistory]);
   const aggregatedSeries = useMemo(() => sanitizeHistory(priceHistory), [priceHistory]);
 
-  // Use ONLY real data - no densification or smoothing
-  const { yesLineData, noLineData } = useMemo(() => {
-    let yesData = [];
-    let noData = [];
+  // Build chart data
+  const chartData = useMemo(() => {
+    const now = Date.now();
+    let timeCutoff = 0;
+    const rangeValue = selectedRange?.toLowerCase() || 'all';
 
-    if (yesSeries.length > 0) {
-      yesData = yesSeries;
-    } else if (aggregatedSeries.length > 0) {
-      yesData = aggregatedSeries;
+    if (rangeValue !== 'all') {
+      const match = rangeValue.match(/^(\d+)([hmwdmy])$/);
+      if (match) {
+        const count = parseInt(match[1], 10);
+        const unit = match[2];
+        const msPerUnit = {
+          h: 60 * 60 * 1000,
+          d: 24 * 60 * 60 * 1000,
+          w: 7 * 24 * 60 * 60 * 1000,
+          m: 30 * 24 * 60 * 60 * 1000,
+          y: 365 * 24 * 60 * 60 * 1000
+        };
+        timeCutoff = now - (count * (msPerUnit[unit] || msPerUnit.d));
+      }
     }
 
-    if (noSeries.length > 0) {
-      noData = noSeries;
-    } else if (aggregatedSeries.length > 0) {
-      noData = aggregatedSeries.map(([ts, val]) => [ts, 1 - val]);
-    }
+    // Combine YES and NO data into unified format
+    const dataMap = new Map();
 
-    return { yesLineData: yesData, noLineData: noData };
-  }, [yesSeries, noSeries, aggregatedSeries]);
+    // Add YES data
+    const yesData = yesSeries.length > 0 ? yesSeries : aggregatedSeries;
+    yesData.forEach(({ timestamp, price }) => {
+      if (timeCutoff === 0 || timestamp >= timeCutoff) {
+        if (!dataMap.has(timestamp)) {
+          dataMap.set(timestamp, { timestamp });
+        }
+        dataMap.get(timestamp).yes = price * 100;
+      }
+    });
 
-  const hasData = yesLineData.length > 0 || noLineData.length > 0;
+    // Add NO data
+    const noData = noSeries.length > 0 ? noSeries : aggregatedSeries.map(d => ({
+      timestamp: d.timestamp,
+      price: 1 - d.price
+    }));
+    noData.forEach(({ timestamp, price }) => {
+      if (timeCutoff === 0 || timestamp >= timeCutoff) {
+        if (!dataMap.has(timestamp)) {
+          dataMap.set(timestamp, { timestamp });
+        }
+        dataMap.get(timestamp).no = price * 100;
+      }
+    });
+
+    // Sort by timestamp and fill missing values
+    const sorted = Array.from(dataMap.values()).sort((a, b) => a.timestamp - b.timestamp);
+    
+    // Forward-fill missing values
+    let lastYes = sorted[0]?.yes;
+    let lastNo = sorted[0]?.no;
+    sorted.forEach(point => {
+      if (point.yes !== undefined) lastYes = point.yes;
+      else point.yes = lastYes;
+      if (point.no !== undefined) lastNo = point.no;
+      else point.no = lastNo;
+    });
+
+    return sorted;
+  }, [yesSeries, noSeries, aggregatedSeries, selectedRange]);
+
+  const hasData = chartData.length > 0;
 
   const rangeButtons = useMemo(() => {
     const sourceRanges = ranges && ranges.length ? ranges : DEFAULT_RANGES;
-    const mapped = sourceRanges
+    return sourceRanges
       .map((range) => {
         const parsed = parseRangeValue(range.value);
         if (!parsed) return null;
-
         return {
           text: range.label.toUpperCase(),
           dataRangeValue: range.value,
@@ -146,8 +223,6 @@ const PolymarketChart = ({
         };
       })
       .filter(Boolean);
-
-    return mapped.length ? mapped : [{ text: 'ALL', type: 'all', dataRangeValue: 'all' }];
   }, [ranges]);
 
   const selectedRangeIndex = useMemo(() => {
@@ -157,335 +232,25 @@ const PolymarketChart = ({
     return index >= 0 ? index : 0;
   }, [rangeButtons, selectedRange]);
 
-  const chartOptions = useMemo(() => {
-    if (!hasData) return null;
+  // Format X axis labels
+  const formatXAxis = (timestamp) => {
+    const date = new Date(timestamp);
+    const timeRange = chartData.length > 1 
+      ? chartData[chartData.length - 1].timestamp - chartData[0].timestamp 
+      : 0;
+    const oneDay = 24 * 60 * 60 * 1000;
+    const oneWeek = 7 * oneDay;
 
-    // Calculate time cutoff based on selected range
-    const now = Date.now();
-    let timeCutoff = 0;
-    const rangeValue = selectedRange?.toLowerCase() || 'all';
-    
-    if (rangeValue !== 'all') {
-      const match = rangeValue.match(/^(\d+)([hmwdmy])$/);
-      if (match) {
-        const count = parseInt(match[1], 10);
-        const unit = match[2];
-        const msPerUnit = {
-          h: 60 * 60 * 1000,           // hour
-          d: 24 * 60 * 60 * 1000,      // day
-          w: 7 * 24 * 60 * 60 * 1000,  // week
-          m: 30 * 24 * 60 * 60 * 1000, // month
-          y: 365 * 24 * 60 * 60 * 1000 // year
-        };
-        timeCutoff = now - (count * (msPerUnit[unit] || msPerUnit.d));
-      }
+    if (timeRange <= oneDay) {
+      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     }
-
-    // Add smooth transitions - only when there's a significant value change
-    const smoothTransitions = (data) => {
-      if (!data || data.length < 2) return data;
-      
-      const result = [];
-      const maxPoints = 500; // Safety limit
-      
-      for (let i = 0; i < data.length; i++) {
-        const current = data[i];
-        result.push(current);
-        
-        // Safety check
-        if (result.length > maxPoints) break;
-        
-        if (i < data.length - 1) {
-          const next = data[i + 1];
-          const timeDiff = next[0] - current[0];
-          const valueDiff = next[1] - current[1];
-          
-          // Only interpolate if there's a meaningful change (> 2%)
-          if (Math.abs(valueDiff) > 0.02) {
-            // Add 6 intermediate points with S-curve easing
-            const steps = 6;
-            for (let s = 1; s <= steps; s++) {
-              if (result.length > maxPoints) break;
-              const t = s / (steps + 1);
-              const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
-              
-              result.push([
-                current[0] + timeDiff * t,
-                current[1] + valueDiff * eased
-              ]);
-            }
-          }
-        }
-      }
-      
-      return result;
-    };
-
-    // Format data and filter by time range
-    const formatSeriesData = (lineData) => {
-      // Filter by time range
-      const filtered = lineData
-        .filter(([ts]) => timeCutoff === 0 || ts >= timeCutoff);
-      
-      if (filtered.length === 0) return [];
-      
-      // Add smooth transition points between data
-      const smoothed = smoothTransitions(filtered);
-      
-      // Convert to chart format
-      return smoothed.map(([ts, value]) => {
-        const rawPercent = Number(value || 0) * 100;
-        return {
-          value: [ts, rawPercent],
-          actual: rawPercent
-        };
-      });
-    };
-
-    const yesData = formatSeriesData(yesLineData);
-    const noData = formatSeriesData(noLineData);
-
-    // If no real data, return null to show "no data" message instead of fake flat lines
-    if (yesData.length === 0 && noData.length === 0) {
-      return null;
+    if (timeRange <= oneWeek) {
+      return `${date.toLocaleString('default', { month: 'short' })} ${date.getDate()}`;
     }
+    return `${date.toLocaleString('default', { month: 'short' })} ${date.getDate()}`;
+  };
 
-    // Calculate time range
-    const allTimestamps = [
-      ...yesData.map((point) => point.value[0]),
-      ...noData.map((point) => point.value[0])
-    ].filter(Number.isFinite);
-    
-    // Set min/max - use cutoff for min when in a time range
-    const dataMinTime = allTimestamps.length > 0 ? Math.min(...allTimestamps) : now - 86400000;
-    const dataMaxTime = allTimestamps.length > 0 ? Math.max(...allTimestamps) : now;
-    
-    // For time ranges, use cutoff as min
-    const minTime = timeCutoff > 0 ? timeCutoff : dataMinTime;
-    const maxTime = Math.max(dataMaxTime, now); // Always extend to now
-
-    // Convert hex to rgba for area fill
-    const hexToRgba = (hex, alpha) => {
-      const r = parseInt(hex.slice(1, 3), 16);
-      const g = parseInt(hex.slice(3, 5), 16);
-      const b = parseInt(hex.slice(5, 7), 16);
-      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    };
-
-    // Build series based on split mode
-    const series = [];
-    
-    // Create smooth, clean lines with high smoothing
-    const createLineSeries = (name, color, data) => ({
-      name,
-      type: 'line',
-      smooth: 0.9, // High bezier smoothing for rounded curves
-      symbol: 'circle',
-      symbolSize: 0,
-      showSymbol: false,
-      sampling: 'lttb',
-      connectNulls: true,
-      clip: true,
-      lineStyle: {
-        width: 2.5,
-        color: color,
-        type: 'solid',
-        cap: 'round',
-        join: 'round',
-        shadowBlur: 14,
-        shadowColor: hexToRgba(color, 0.55),
-        shadowOffsetX: 0,
-        shadowOffsetY: 0,
-        opacity: 1
-      },
-      areaStyle: undefined,
-      emphasis: {
-        focus: 'series',
-        lineStyle: {
-          width: 3.5,
-          shadowBlur: 20,
-          shadowColor: hexToRgba(color, 0.75),
-          opacity: 1
-        }
-      },
-      data
-    });
-
-    if (splitLines === true) {
-      // SPLIT MODE: Show ONLY the selected side
-      if (selectedSide === 'yes') {
-        if (yesData.length > 0) {
-          series.push(createLineSeries('YES', accentYes, yesData));
-        }
-      } else if (selectedSide === 'no') {
-        if (noData.length > 0) {
-          series.push(createLineSeries('NO', accentNo, noData));
-        }
-      }
-    } else {
-      // DEFAULT: Show both lines together
-      if (yesData.length > 0) {
-        series.push(createLineSeries('YES', accentYes, yesData));
-      }
-      if (noData.length > 0) {
-        series.push(createLineSeries('NO', accentNo, noData));
-      }
-    }
-
-    if (series.length === 0) return null;
-    
-    // Determine active color for tooltip border (YES takes priority)
-    const activeColor = series[0]?.lineStyle?.color || accentYes;
-
-    return {
-      backgroundColor: 'transparent',
-      animation: true,
-      animationDuration: 400,
-      grid: {
-        left: '3%',
-        right: '12%',
-        top: '8%',
-        bottom: '12%',
-        containLabel: true
-      },
-      tooltip: {
-        show: true,
-        trigger: 'axis',
-        confine: true,
-        backgroundColor: 'rgba(15, 15, 15, 0.96)',
-        borderColor: hexToRgba(activeColor, 0.6),
-        borderWidth: 1,
-        borderRadius: 8,
-        padding: [12, 16],
-        textStyle: {
-          color: '#fff',
-          fontSize: 13
-        },
-        extraCssText: 'box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 9999;',
-        axisPointer: {
-          type: 'cross',
-          crossStyle: {
-            color: 'rgba(255,255,255,0.3)',
-            width: 1,
-            type: 'dashed'
-          },
-          lineStyle: {
-            color: hexToRgba(activeColor, 0.6),
-            type: 'solid',
-            width: 1
-          },
-          label: {
-            show: false
-          }
-        },
-        formatter: function(params) {
-          if (!params || params.length === 0) return '';
-          
-          // Get the timestamp from first param
-          const timestamp = params[0]?.value?.[0];
-          if (!timestamp) return '';
-          
-          const date = new Date(timestamp);
-          const dateStr = date.toLocaleString('en-US', { 
-            month: 'short', day: 'numeric', year: 'numeric',
-            hour: 'numeric', minute: '2-digit', hour12: true 
-          });
-          
-          // Build tooltip content
-          let content = `<div style="font-size: 11px; color: rgba(255,255,255,0.6); margin-bottom: 8px; font-weight: 500;">${dateStr}</div>`;
-          content += `<div style="display: flex; gap: 8px; flex-wrap: wrap;">`;
-          
-          params.forEach(param => {
-            if (!param?.value) return;
-            const seriesName = param.seriesName || 'Value';
-            const value = param.value[1];
-            if (value === undefined || value === null) return;
-            
-            const color = seriesName === 'YES' ? '#FFE600' : '#7C3AED';
-            const textColor = seriesName === 'YES' ? '#000' : '#fff';
-            content += `<div style="display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 6px; background: ${color}; color: ${textColor}; font-weight: 600; font-size: 13px;">
-                    ${seriesName} ${Number(value).toFixed(1)}%
-                  </div>`;
-          });
-          
-          content += `</div>`;
-          return content;
-        }
-      },
-      legend: { show: false },
-      xAxis: {
-        type: 'time',
-        boundaryGap: false,
-        axisLine: {
-          show: true,
-          lineStyle: { color: 'rgba(255, 255, 255, 0.1)', width: 1 }
-        },
-        axisLabel: {
-          show: true,
-          color: 'rgba(255, 255, 255, 0.5)',
-          fontSize: 11,
-          margin: 14,
-          formatter: function(value) {
-            const date = new Date(value);
-            const timeRange = maxTime - minTime;
-            const oneDay = 24 * 60 * 60 * 1000;
-            const oneWeek = 7 * oneDay;
-            
-            // Show time for ranges <= 1 day
-            if (timeRange <= oneDay) {
-              return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-            }
-            // Show day + time for ranges <= 1 week
-            if (timeRange <= oneWeek) {
-              const month = date.toLocaleString('default', { month: 'short' });
-              const day = date.getDate();
-              const time = date.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
-              return `${month} ${day}\n${time}`;
-            }
-            // Show month + day for longer ranges
-            const month = date.toLocaleString('default', { month: 'short' });
-            const day = date.getDate();
-            return `${month} ${day}`;
-          }
-        },
-        splitLine: { show: false },
-        min: minTime,
-        max: maxTime
-      },
-      yAxis: {
-        type: 'value',
-        min: 0,
-        max: 100,
-        interval: 20,
-        position: 'right',
-        axisLine: { show: false },
-        axisLabel: {
-          show: true,
-          color: 'rgba(255, 255, 255, 0.5)',
-          fontSize: 11,
-          margin: 10,
-          formatter: (val) => `${val}%`
-        },
-        splitLine: {
-          show: true,
-          lineStyle: {
-            color: 'rgba(255, 255, 255, 0.06)',
-            type: 'dashed',
-            width: 1
-          }
-        }
-      },
-      series
-    };
-  }, [accentNo, accentYes, hasData, noLineData, yesLineData, selectedSide, splitLines, selectedRange]);
-
-  // Check if we only have current price fallback (2 points with same value = flat line)
-  const hasOnlyFallback = hasData && 
-    yesSeries.length === 2 && 
-    yesSeries[0][1] === yesSeries[1][1] &&
-    (yesPriceHistory.length === 0 && noPriceHistory.length === 0 && priceHistory.length === 0);
-
-  if (!hasData || !chartOptions) {
+  if (!hasData) {
     return (
       <div
         className="glass-card flex flex-col items-center justify-center rounded-[16px] sm:rounded-[24px] border border-white/20 backdrop-blur-xl text-white/60 p-4"
@@ -503,55 +268,30 @@ const PolymarketChart = ({
     <div className="mb-2 sm:mb-3 flex flex-wrap items-center justify-between gap-2">
       {/* Left side: Line selection buttons */}
       <div className="flex items-center gap-1 sm:gap-1.5 bg-white/5 backdrop-blur-md rounded-full p-0.5 sm:p-1 border border-white/10">
-        {/* Both lines button (default) */}
         <button
-          onClick={() => {
-            setSplitLines(false);
-          }}
+          onClick={() => setSplitLines(false)}
           className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full transition-all text-[10px] sm:text-xs font-semibold ${
-            !splitLines
-              ? 'bg-white/20 text-white'
-              : 'text-white/50 hover:text-white hover:bg-white/10'
+            !splitLines ? 'bg-white/20 text-white' : 'text-white/50 hover:text-white hover:bg-white/10'
           }`}
-          style={{
-            fontFamily: 'gilroy, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-          }}
+          style={{ fontFamily: 'gilroy, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
         >
           Both
         </button>
-
-        {/* YES only button */}
         <button
-          onClick={() => {
-            setSplitLines(true);
-            setSelectedSide('yes');
-          }}
+          onClick={() => { setSplitLines(true); setSelectedSide('yes'); }}
           className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full transition-all text-[10px] sm:text-xs font-semibold ${
-            splitLines && selectedSide === 'yes'
-              ? 'bg-[#FFE600] text-black'
-              : 'text-white/50 hover:text-white hover:bg-white/10'
+            splitLines && selectedSide === 'yes' ? 'bg-[#FFE600] text-black' : 'text-white/50 hover:text-white hover:bg-white/10'
           }`}
-          style={{
-            fontFamily: 'gilroy, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-          }}
+          style={{ fontFamily: 'gilroy, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
         >
           YES
         </button>
-
-        {/* NO only button */}
         <button
-          onClick={() => {
-            setSplitLines(true);
-            setSelectedSide('no');
-          }}
+          onClick={() => { setSplitLines(true); setSelectedSide('no'); }}
           className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full transition-all text-[10px] sm:text-xs font-semibold ${
-            splitLines && selectedSide === 'no'
-              ? 'bg-[#7C3AED] text-white'
-              : 'text-white/50 hover:text-white hover:bg-white/10'
+            splitLines && selectedSide === 'no' ? 'bg-[#7C3AED] text-white' : 'text-white/50 hover:text-white hover:bg-white/10'
           }`}
-          style={{
-            fontFamily: 'gilroy, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-          }}
+          style={{ fontFamily: 'gilroy, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
         >
           NO
         </button>
@@ -571,9 +311,7 @@ const PolymarketChart = ({
                   ? 'bg-white/15 text-white border border-white/20'
                   : 'bg-white/5 text-white/60 hover:bg-white/10 border border-transparent'
               } backdrop-blur-md flex-shrink-0`}
-              style={{
-                fontFamily: 'gilroy, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-              }}
+              style={{ fontFamily: 'gilroy, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
             >
               {btn.text}
             </button>
@@ -587,29 +325,73 @@ const PolymarketChart = ({
     <div className="glass-card w-full rounded-[16px] sm:rounded-[24px] border border-white/20 backdrop-blur-xl p-3 sm:p-4" style={{ background: 'rgba(12,12,12,0.55)' }}>
       {renderControls()}
       <div className="overflow-hidden rounded-[12px] sm:rounded-[16px]" style={{ height: typeof height === 'number' ? Math.max(180, height * 0.8) : height }}>
-        {chartOptions ? (
-          <ReactECharts 
-            key={`${splitLines}-${selectedSide}-${selectedRange}`}
-            option={chartOptions} 
-            style={{ height: '100%', width: '100%' }}
-            notMerge={true}
-            lazyUpdate={false}
-          />
-        ) : (
-          <div className="h-full flex items-center justify-center text-white/40 text-sm" style={{ fontFamily: 'gilroy, sans-serif' }}>
-            <div className="text-center">
-              <svg className="w-10 h-10 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              <p>No trading activity in this time period</p>
-              <p className="text-xs text-white/25 mt-1">Try selecting a longer time range</p>
-            </div>
-          </div>
-        )}
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 10, right: 50, left: 10, bottom: 10 }}>
+            {/* Grid lines */}
+            <ReferenceLine y={20} stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+            <ReferenceLine y={40} stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+            <ReferenceLine y={60} stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+            <ReferenceLine y={80} stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+            <ReferenceLine y={100} stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+            
+            <XAxis
+              dataKey="timestamp"
+              tickFormatter={formatXAxis}
+              stroke="rgba(255,255,255,0.1)"
+              tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }}
+              axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+              tickLine={false}
+              minTickGap={50}
+            />
+            <YAxis
+              domain={[0, 100]}
+              ticks={[0, 20, 40, 60, 80, 100]}
+              orientation="right"
+              stroke="rgba(255,255,255,0.1)"
+              tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }}
+              tickFormatter={(v) => `${v}%`}
+              axisLine={false}
+              tickLine={false}
+              width={45}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            
+            {/* YES Line - smooth monotone curve */}
+            {(!splitLines || selectedSide === 'yes') && (
+              <Line
+                type="monotone"
+                dataKey="yes"
+                name="YES"
+                stroke={accentYes}
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{ r: 4, fill: accentYes, stroke: '#000', strokeWidth: 2 }}
+                style={{
+                  filter: `drop-shadow(0 0 8px ${accentYes}66)`
+                }}
+              />
+            )}
+            
+            {/* NO Line - smooth monotone curve */}
+            {(!splitLines || selectedSide === 'no') && (
+              <Line
+                type="monotone"
+                dataKey="no"
+                name="NO"
+                stroke={accentNo}
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{ r: 4, fill: accentNo, stroke: '#fff', strokeWidth: 2 }}
+                style={{
+                  filter: `drop-shadow(0 0 8px ${accentNo}66)`
+                }}
+              />
+            )}
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
 };
 
 export default PolymarketChart;
-
