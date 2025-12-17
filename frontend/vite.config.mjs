@@ -31,11 +31,6 @@ export default defineConfig(() => {
     },
     optimizeDeps: {
       include: ['buffer', 'ethers'],
-      esbuildOptions: {
-        define: {
-          global: 'globalThis',
-        },
-      },
     },
     build: {
       outDir: 'dist',
@@ -58,9 +53,6 @@ export default defineConfig(() => {
               }
               if (id.includes('chart') || id.includes('echarts') || id.includes('highcharts') || id.includes('recharts')) {
                 return 'vendor-charts';
-              }
-              if (id.includes('walletconnect') || id.includes('@walletconnect')) {
-                return 'vendor-walletconnect';
               }
               // Other vendor code
               return 'vendor';

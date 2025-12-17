@@ -3,24 +3,6 @@ import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
 import { CONTRACT_ADDRESS, CHAIN_ID, CONTRACT_ABI, RPC_URL, NETWORK_NAME } from '../contracts/eth-config';
 
-// WalletConnect Project ID - Get yours at https://cloud.walletconnect.com
-const WALLETCONNECT_PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || '2f05ae7f1116030f3add0b9d1f016c9e';
-
-// Lazy load WalletConnect to prevent build/SSR issues
-let EthereumProviderModule = null;
-const loadWalletConnect = async () => {
-  if (!EthereumProviderModule) {
-    try {
-      const module = await import('@walletconnect/ethereum-provider');
-      EthereumProviderModule = module.default;
-    } catch (err) {
-      console.error('Failed to load WalletConnect:', err);
-      return null;
-    }
-  }
-  return EthereumProviderModule;
-};
-
 // Environment configuration loaded - log for debugging on Vercel
 console.log('🔧 Web3 Config:', { 
   CONTRACT_ADDRESS: CONTRACT_ADDRESS || 'NOT SET', 
@@ -102,7 +84,6 @@ export const Web3Provider = ({ children }) => {
   // Refs to prevent infinite loops
   const connectingRef = useRef(false);
   const autoConnectedRef = useRef(false);
-  const walletConnectProviderRef = useRef(null);
 
   // Network info - use environment variable
   const getNetworkName = (chainId) => {
@@ -289,123 +270,6 @@ export const Web3Provider = ({ children }) => {
     }
   }, [getEthereumProvider]);
 
-  // Check if on mobile device
-  const isMobile = useCallback(() => {
-    return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  }, []);
-
-  // Connect via WalletConnect (for mobile users)
-  const connectWithWalletConnect = useCallback(async () => {
-    try {
-      // Load WalletConnect dynamically
-      const EthereumProvider = await loadWalletConnect();
-      if (!EthereumProvider) {
-        toast.error('WalletConnect failed to load. Please try again.');
-        return false;
-      }
-      
-      // Create WalletConnect provider - Incentiv Testnet only
-      const wcProvider = await EthereumProvider.init({
-        projectId: WALLETCONNECT_PROJECT_ID,
-        chains: [CHAIN_ID], // Incentiv Testnet only
-        showQrModal: true,
-        qrModalOptions: {
-          themeMode: 'dark',
-          enableExplorer: false, // Disable explorer to simplify
-          explorerRecommendedWalletIds: [
-            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
-          ],
-          mobileWallets: [
-            {
-              id: 'metamask',
-              name: 'MetaMask',
-              links: {
-                native: 'metamask://',
-                universal: 'https://metamask.app.link',
-              },
-            },
-          ],
-        },
-        metadata: {
-          name: 'PolyDegen',
-          description: 'Prediction Market Platform',
-          url: window.location.origin,
-          icons: [`${window.location.origin}/favicon.ico`],
-        },
-        rpcMap: {
-          [CHAIN_ID]: RPC_URL,
-        },
-      });
-
-      // Store reference for cleanup
-      walletConnectProviderRef.current = wcProvider;
-
-      // Enable session (shows QR modal)
-      await wcProvider.enable();
-
-      const accounts = wcProvider.accounts;
-      if (!accounts || accounts.length === 0) {
-        throw new Error('No accounts found');
-      }
-
-      const web3Provider = new ethers.providers.Web3Provider(wcProvider);
-      const network = await web3Provider.getNetwork();
-      const web3Signer = web3Provider.getSigner();
-
-      // Set state
-      setProvider(web3Provider);
-      setChainId(network.chainId);
-      setAccount(accounts[0]);
-      setSigner(web3Signer);
-      setIsConnected(true);
-
-      // Switch network if needed
-      if (network.chainId !== CHAIN_ID) {
-        try {
-          await wcProvider.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: `0x${CHAIN_ID.toString(16)}` }],
-          });
-        } catch (switchError) {
-          console.warn('Network switch failed:', switchError);
-          toast.error(`Please switch to ${NETWORK_NAME} in your wallet`);
-        }
-      }
-
-      // Initialize contracts
-      await initializeContracts(web3Signer);
-      updateEthBalance();
-
-      // Listen for WalletConnect events
-      wcProvider.on('accountsChanged', (accounts) => {
-        if (accounts.length === 0) {
-          disconnectWallet();
-        } else {
-          setAccount(accounts[0]);
-        }
-      });
-
-      wcProvider.on('chainChanged', (chainId) => {
-        setChainId(parseInt(chainId, 16));
-      });
-
-      wcProvider.on('disconnect', () => {
-        disconnectWallet();
-      });
-
-      toast.success('✅ Wallet connected via WalletConnect!');
-      return true;
-    } catch (err) {
-      console.error('WalletConnect error:', err);
-      if (err.message?.includes('User rejected') || err.message?.includes('user rejected')) {
-        toast.error('Connection was rejected');
-      } else {
-        toast.error('Failed to connect via WalletConnect');
-      }
-      return false;
-    }
-  }, [initializeContracts, updateEthBalance]);
-
   // Connect wallet
   const connectWallet = useCallback(async () => {
     // Prevent multiple simultaneous connection attempts
@@ -417,19 +281,13 @@ export const Web3Provider = ({ children }) => {
     const ethereumProvider = getEthereumProvider();
     
     if (!ethereumProvider) {
-      // On mobile, use WalletConnect to stay in browser
-      if (isMobile()) {
-        connectingRef.current = true;
-        setIsConnecting(true);
-        setError(null);
-        
-        try {
-          const result = await connectWithWalletConnect();
-          return result;
-        } finally {
-          setIsConnecting(false);
-          connectingRef.current = false;
-        }
+      // On mobile, try to open MetaMask app
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        const dappUrl = window.location.href.replace(/^https?:\/\//, '');
+        const metamaskAppDeepLink = `https://metamask.app.link/dapp/${dappUrl}`;
+        window.location.href = metamaskAppDeepLink;
+        return false;
       }
       
       // Check if other wallets are installed but MetaMask is not
@@ -528,20 +386,10 @@ export const Web3Provider = ({ children }) => {
       setIsConnecting(false);
       connectingRef.current = false;
     }
-  }, [initializeContracts, addNetwork, updateEthBalance, isConnecting, getEthereumProvider, isMobile, connectWithWalletConnect]);
+  }, [initializeContracts, addNetwork, updateEthBalance, isConnecting, getEthereumProvider]);
 
   // Disconnect wallet
-  const disconnectWallet = useCallback(async () => {
-    // Disconnect WalletConnect if connected
-    if (walletConnectProviderRef.current) {
-      try {
-        await walletConnectProviderRef.current.disconnect();
-      } catch (err) {
-        console.warn('WalletConnect disconnect error:', err);
-      }
-      walletConnectProviderRef.current = null;
-    }
-    
+  const disconnectWallet = useCallback(() => {
     setProvider(null);
     setSigner(null);
     setAccount(null);
