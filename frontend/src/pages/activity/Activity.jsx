@@ -188,21 +188,16 @@ const Activity = () => {
     }
   };
 
-  // Filter activity
-  const filteredActivity = activity.filter((item) => {
-    if (filter === 'trades') return item.eventType === 'ORDER_FILLED' || item.eventType === 'ORDER_PLACED';
-    if (filter === 'resolved') return item.eventType === 'MARKET_RESOLVED';
-    if (filter === 'created') return item.eventType === 'MARKET_CREATED';
-  });
-
+  // Fetch activity with server-side filtering
   useEffect(() => {
     const fetchActivity = async () => {
+      setLoading(true);
       try {
         const base =
           window.__ENV?.API_BASE_URL ||
           import.meta.env.VITE_API_BASE_URL ||
           '';
-        const res = await fetch(`${base}/api/activity?limit=50`);
+        const res = await fetch(`${base}/api/activity?limit=30&eventType=${filter}`);
         if (!res.ok) throw new Error('Failed to load activity');
         const data = await res.json();
         setActivity(data.activity || []);
@@ -214,7 +209,7 @@ const Activity = () => {
     };
 
     fetchActivity();
-  }, []);
+  }, [filter]);
 
   return (
     <div className="min-h-screen bg-[#050505]">
@@ -303,18 +298,15 @@ const Activity = () => {
           {/* Activity list – full-width rows with subtle dividers, no outer card */}
           {loading ? (
             <ActivitySkeleton />
-          ) : filteredActivity.length === 0 ? (
+          ) : activity.length === 0 ? (
             <div className="rounded-[18px] bg-[#050505] shadow-[0_22px_60px_rgba(0,0,0,0.75)]">
               <div className="px-4 py-6 text-sm text-[#BABABA]">
-                {activity.length === 0 
-                  ? 'No recent activity yet. Trade a market to see it here.'
-                    : `No ${filter === 'resolved' ? '' : filter} activity found.`
-                }
+                No {filter === 'resolved' ? 'resolved markets' : filter === 'created' ? 'created markets' : 'trades'} found.
               </div>
             </div>
           ) : (
             <div className="rounded-[18px] bg-[#050505] shadow-[0_22px_60px_rgba(0,0,0,0.75)]">
-              {filteredActivity.map((item) => (
+              {activity.map((item) => (
                 <ActivityRow 
                   key={item.id} 
                   item={item} 
