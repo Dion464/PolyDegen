@@ -4,6 +4,7 @@ import { ErrorBoundary } from 'react-error-boundary';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './helpers/AuthContent';
 import { Web3Provider } from './hooks/useWeb3';
+import { WebSocketProvider } from './contexts/WebSocketContext';
 import AppRoutes from './helpers/AppRoutes';
 import '../index.css';
 
@@ -34,13 +35,14 @@ function App() {
       }}
     >
       <Web3Provider>
-        <AuthProvider>
-          <Router>
-            <div className='App min-h-screen bg-gray-50 font-body'>
-              <main>
-                <AppRoutes />
-              </main>
-              <Toaster
+        <WebSocketProvider>
+          <AuthProvider>
+            <Router>
+              <div className='App min-h-screen bg-gray-50 font-body'>
+                <main>
+                  <AppRoutes />
+                </main>
+                <Toaster
                 position="top-right"
                 toastOptions={{
                   duration: 4500,
@@ -69,10 +71,11 @@ function App() {
                     },
                   },
                 }}
-              />
-            </div>
-          </Router>
-        </AuthProvider>
+                />
+              </div>
+            </Router>
+          </AuthProvider>
+        </WebSocketProvider>
       </Web3Provider>
     </ErrorBoundary>
   );

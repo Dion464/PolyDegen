@@ -7,6 +7,9 @@ import { getOrderMatcher } from './lib/orderMatcher.js';
 // Note: executeOrderViaAMM not implemented yet
 // import { executeOrderViaAMM } from './lib/execute-amm-order.js';
 
+// WebSocket broadcaster for handlers
+const wsBroadcaster = require('./lib/wsBroadcaster.js');
+
 // Import handlers from lib/api-handlers
 const priceHistoryHandler = require('./lib/api-handlers/price-history.js');
 const recordPriceHandler = require('./lib/api-handlers/record-price.js');
@@ -288,10 +291,16 @@ const wss = new WebSocketServer({
   }
 });
 
+// Subscription channels
 const clients = new Map(); // marketId:outcomeId -> Set of WebSocket connections
+const globalSubscribers = new Set(); // Clients subscribed to all updates
+const marketSubscribers = new Map(); // marketId -> Set of clients for market-specific updates
 
 wss.on('connection', (ws, req) => {
   console.log('📡 New WebSocket connection from:', req.socket.remoteAddress);
+  
+  // Track all subscriptions for this client
+  ws.subscriptions = new Set();
 
   ws.on('message', (message) => {
     try {
@@ -304,15 +313,52 @@ wss.on('connection', (ws, req) => {
           clients.set(key, new Set());
         }
         clients.get(key).add(ws);
-        ws.subscribedKey = key;
+        ws.subscriptions.add({ type: 'orderbook', key });
         
         ws.send(JSON.stringify({
           type: 'subscribed',
+          channel: 'orderbook',
           marketId: data.marketId,
           outcomeId: data.outcomeId
         }));
         
-        console.log(`✅ Client subscribed to ${key}`);
+        console.log(`✅ Client subscribed to orderbook: ${key}`);
+      }
+      
+      // Subscribe to all global updates (prices, activity, etc.)
+      if (data.type === 'subscribe_global') {
+        globalSubscribers.add(ws);
+        ws.subscriptions.add({ type: 'global' });
+        
+        ws.send(JSON.stringify({
+          type: 'subscribed',
+          channel: 'global'
+        }));
+        
+        console.log('✅ Client subscribed to global updates');
+      }
+      
+      // Subscribe to a specific market's updates
+      if (data.type === 'subscribe_market') {
+        const marketId = data.marketId;
+        if (!marketSubscribers.has(marketId)) {
+          marketSubscribers.set(marketId, new Set());
+        }
+        marketSubscribers.get(marketId).add(ws);
+        ws.subscriptions.add({ type: 'market', marketId });
+        
+        ws.send(JSON.stringify({
+          type: 'subscribed',
+          channel: 'market',
+          marketId
+        }));
+        
+        console.log(`✅ Client subscribed to market: ${marketId}`);
+      }
+      
+      // Ping/pong for keep-alive
+      if (data.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
       }
     } catch (error) {
       console.error('WebSocket message error:', error);
@@ -325,12 +371,24 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
-    if (ws.subscribedKey && clients.has(ws.subscribedKey)) {
-      clients.get(ws.subscribedKey).delete(ws);
-      if (clients.get(ws.subscribedKey).size === 0) {
-        clients.delete(ws.subscribedKey);
+    // Clean up all subscriptions
+    globalSubscribers.delete(ws);
+    
+    ws.subscriptions?.forEach(sub => {
+      if (sub.type === 'orderbook' && clients.has(sub.key)) {
+        clients.get(sub.key).delete(ws);
+        if (clients.get(sub.key).size === 0) {
+          clients.delete(sub.key);
+        }
       }
-    }
+      if (sub.type === 'market' && marketSubscribers.has(sub.marketId)) {
+        marketSubscribers.get(sub.marketId).delete(ws);
+        if (marketSubscribers.get(sub.marketId).size === 0) {
+          marketSubscribers.delete(sub.marketId);
+        }
+      }
+    });
+    
     console.log('📡 WebSocket disconnected');
   });
 });
@@ -344,6 +402,7 @@ export function broadcastOrderBookUpdate(marketId, outcomeId, orderBookData) {
     type: 'orderbook_update',
     marketId,
     outcomeId,
+    timestamp: Date.now(),
     ...orderBookData
   });
   
@@ -354,10 +413,90 @@ export function broadcastOrderBookUpdate(marketId, outcomeId, orderBookData) {
   });
 }
 
-// NOTE: setBroadcastFunction and setSettlementCallback are currently not implemented
-// If WebSocket broadcasting is needed, add these exports to orderBookService.js
-// setBroadcastFunction(broadcastOrderBookUpdate);
-// setSettlementCallback(handleAutoSettlement);
+// Broadcast price updates to global and market subscribers
+export function broadcastPriceUpdate(marketId, priceData) {
+  const message = JSON.stringify({
+    type: 'price_update',
+    marketId,
+    timestamp: Date.now(),
+    ...priceData
+  });
+  
+  // Send to global subscribers
+  globalSubscribers.forEach(client => {
+    if (client.readyState === 1) {
+      client.send(message);
+    }
+  });
+  
+  // Send to market-specific subscribers
+  if (marketSubscribers.has(marketId)) {
+    marketSubscribers.get(marketId).forEach(client => {
+      if (client.readyState === 1) {
+        client.send(message);
+      }
+    });
+  }
+}
+
+// Broadcast new activity (trades, etc.)
+export function broadcastActivity(activity) {
+  const message = JSON.stringify({
+    type: 'activity',
+    timestamp: Date.now(),
+    ...activity
+  });
+  
+  // Send to all global subscribers
+  globalSubscribers.forEach(client => {
+    if (client.readyState === 1) {
+      client.send(message);
+    }
+  });
+  
+  // Send to market-specific subscribers if activity has marketId
+  if (activity.marketId && marketSubscribers.has(activity.marketId)) {
+    marketSubscribers.get(activity.marketId).forEach(client => {
+      if (client.readyState === 1) {
+        client.send(message);
+      }
+    });
+  }
+}
+
+// Broadcast market status changes (resolved, etc.)
+export function broadcastMarketUpdate(marketId, updateData) {
+  const message = JSON.stringify({
+    type: 'market_update',
+    marketId,
+    timestamp: Date.now(),
+    ...updateData
+  });
+  
+  // Send to global and market subscribers
+  globalSubscribers.forEach(client => {
+    if (client.readyState === 1) {
+      client.send(message);
+    }
+  });
+  
+  if (marketSubscribers.has(marketId)) {
+    marketSubscribers.get(marketId).forEach(client => {
+      if (client.readyState === 1) {
+        client.send(message);
+      }
+    });
+  }
+}
+
+// Register broadcast functions with the broadcaster module
+// This allows API handlers to broadcast updates
+wsBroadcaster.setBroadcastFunctions({
+  priceUpdate: broadcastPriceUpdate,
+  activity: broadcastActivity,
+  marketUpdate: broadcastMarketUpdate,
+  orderBookUpdate: broadcastOrderBookUpdate
+});
 
 // Auto-settlement callback
 async function handleAutoSettlement({ makerOrder, takerOrder, fillSize, fillPrice }) {
