@@ -2,10 +2,24 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
 import { CONTRACT_ADDRESS, CHAIN_ID, CONTRACT_ABI, RPC_URL, NETWORK_NAME } from '../contracts/eth-config';
-import EthereumProvider from '@walletconnect/ethereum-provider';
 
 // WalletConnect Project ID - Get yours at https://cloud.walletconnect.com
-const WALLETCONNECT_PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ;
+const WALLETCONNECT_PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || '2f05ae7f1116030f3add0b9d1f016c9e';
+
+// Lazy load WalletConnect to prevent build/SSR issues
+let EthereumProviderModule = null;
+const loadWalletConnect = async () => {
+  if (!EthereumProviderModule) {
+    try {
+      const module = await import('@walletconnect/ethereum-provider');
+      EthereumProviderModule = module.default;
+    } catch (err) {
+      console.error('Failed to load WalletConnect:', err);
+      return null;
+    }
+  }
+  return EthereumProviderModule;
+};
 
 // Environment configuration loaded - log for debugging on Vercel
 console.log('🔧 Web3 Config:', { 
@@ -283,6 +297,13 @@ export const Web3Provider = ({ children }) => {
   // Connect via WalletConnect (for mobile users)
   const connectWithWalletConnect = useCallback(async () => {
     try {
+      // Load WalletConnect dynamically
+      const EthereumProvider = await loadWalletConnect();
+      if (!EthereumProvider) {
+        toast.error('WalletConnect failed to load. Please try again.');
+        return false;
+      }
+      
       // Create WalletConnect provider - Incentiv Testnet only
       const wcProvider = await EthereumProvider.init({
         projectId: WALLETCONNECT_PROJECT_ID,
