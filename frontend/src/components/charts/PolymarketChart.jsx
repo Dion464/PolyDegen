@@ -205,23 +205,40 @@ const PolymarketChart = ({
       else point.no = lastNo;
     });
 
-    // ALWAYS add smooth interpolation for rounder curves
+    // Step 1: Sample data if too many points (to prevent glitching)
     if (sorted.length < 2) return sorted;
     
+    let sampled = sorted;
+    const maxBasePoints = 30; // Maximum base points before interpolation
+    
+    if (sorted.length > maxBasePoints) {
+      // Sample evenly to reduce points
+      const step = Math.ceil(sorted.length / maxBasePoints);
+      sampled = [];
+      for (let i = 0; i < sorted.length; i += step) {
+        sampled.push(sorted[i]);
+      }
+      // Always include the last point
+      if (sampled[sampled.length - 1] !== sorted[sorted.length - 1]) {
+        sampled.push(sorted[sorted.length - 1]);
+      }
+    }
+    
+    // Step 2: Add smooth interpolation between sampled points
     const interpolated = [];
-    for (let i = 0; i < sorted.length; i++) {
-      const current = sorted[i];
+    for (let i = 0; i < sampled.length; i++) {
+      const current = sampled[i];
       interpolated.push(current);
       
-      if (i < sorted.length - 1) {
-        const next = sorted[i + 1];
+      if (i < sampled.length - 1) {
+        const next = sampled[i + 1];
         const timeDiff = next.timestamp - current.timestamp;
         const yesDiff = (next.yes || 0) - (current.yes || 0);
         const noDiff = (next.no || 0) - (current.no || 0);
         
-        // ALWAYS add 3 interpolation points with S-curve easing
-        for (let j = 1; j <= 3; j++) {
-          const t = j / 4;
+        // Add 4 interpolation points with S-curve easing
+        for (let j = 1; j <= 4; j++) {
+          const t = j / 5;
           const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
           
           interpolated.push({
