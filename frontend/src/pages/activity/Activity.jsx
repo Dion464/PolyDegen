@@ -172,7 +172,7 @@ const ActivityRow = ({ item, onClick }) => {
 const Activity = () => {
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('resolved');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const history = useHistory();
 
@@ -308,7 +308,7 @@ const Activity = () => {
               <div className="px-4 py-6 text-sm text-[#BABABA]">
                 {activity.length === 0 
                   ? 'No recent activity yet. Trade a market to see it here.'
-                  : `No ${filter === 'resolved' ? '' : filter} activity found.`
+                    : `No ${filter === 'resolved' ? '' : filter} activity found.`
                 }
               </div>
             </div>

@@ -133,7 +133,7 @@ const PolymarketStyleTrading = () => {
   });
   const [uniqueTraders, setUniqueTraders] = useState(0);
   const [liquidity, setLiquidity] = useState(0);
-  const [timeframe, setTimeframe] = useState('1d');
+  const [timeframe, setTimeframe] = useState('all');
   const refreshTriggerRef = useRef(0); // Force refresh counter
   const isFetchingRef = useRef(false); // Prevent concurrent fetches
   const [customRules, setCustomRules] = useState([]);
