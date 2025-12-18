@@ -10,6 +10,7 @@ const WormStyleNavbar = () => {
     account,
     isConnected,
     connectWallet,
+    disconnectWallet,
     isConnecting,
     getUserMarkets,
     getMarketData,
@@ -31,7 +32,7 @@ const WormStyleNavbar = () => {
 
   const handleConnectClick = () => {
     if (isConnected && account) {
-      history.push(`/user/${account}`);
+      disconnectWallet();
     } else {
       connectWallet();
     }
