@@ -28,6 +28,8 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         uint256 yesAskPrice; // Best ask for YES in basis points
         uint256 noBidPrice;  // Best bid for NO in basis points
         uint256 noAskPrice;  // Best ask for NO in basis points
+        // Pari-mutuel pool tracking
+        uint256 totalPool; // Total ETH pooled from all purchases (for pari-mutuel payouts)
     }
 
     struct Position {
@@ -56,6 +58,19 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         bool cancelled;
     }
 
+    // Sell Order for user-to-user trading
+    struct SellOrder {
+        uint256 id;
+        uint256 marketId;
+        address seller;
+        bool isYes; // true = selling YES shares, false = selling NO shares
+        uint256 shares; // Number of shares to sell
+        uint256 pricePerShare; // Price per share in wei
+        uint256 timestamp;
+        bool filled;
+        bool cancelled;
+    }
+
     // State variables
     uint256 public nextMarketId;
     uint256 public marketCreationFee; // Fee to create market
@@ -69,6 +84,11 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
     Trade[] public allTrades;
     LimitOrder[] public allLimitOrders;
     mapping(uint256 => uint256[]) public marketLimitOrders; // marketId => order IDs
+    
+    // Sell order book for user-to-user trading
+    SellOrder[] public allSellOrders;
+    mapping(uint256 => uint256[]) public marketSellOrders; // marketId => sell order IDs
+    mapping(address => uint256[]) public userSellOrders; // user => sell order IDs
     
     // Optimistic Oracle Resolution System
     struct ResolutionProposal {
@@ -122,6 +142,31 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
     );
     
     event LimitOrderPlaced(uint256 indexed marketId, address indexed trader, bool isYes, uint256 price, uint256 amount);
+    
+    // Sell order events for user-to-user trading
+    event SellOrderPlaced(
+        uint256 indexed orderId,
+        uint256 indexed marketId,
+        address indexed seller,
+        bool isYes,
+        uint256 shares,
+        uint256 pricePerShare
+    );
+    
+    event SellOrderMatched(
+        uint256 indexed orderId,
+        uint256 indexed marketId,
+        address indexed buyer,
+        address seller,
+        uint256 shares,
+        uint256 totalPrice
+    );
+    
+    event SellOrderCancelled(
+        uint256 indexed orderId,
+        uint256 indexed marketId,
+        address indexed seller
+    );
     
     // Optimistic Oracle Events
     event ResolutionProposed(
@@ -191,7 +236,9 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             yesBidPrice: 0, // No initial bids
             yesAskPrice: 10000, // No initial asks
             noBidPrice: 0, // No initial bids
-            noAskPrice: 10000 // No initial asks
+            noAskPrice: 10000, // No initial asks
+            // Pari-mutuel pool starts at 0
+            totalPool: 0
         });
 
         activeMarketIds.push(marketId);
@@ -272,6 +319,8 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             market.totalNoShares += shares;
         }
         market.totalVolume += msg.value;
+        // Track actual ETH deposited for pari-mutuel payouts (investment amount minus platform fee)
+        market.totalPool += investmentAmount;
 
         // Update user position
         Position storage position = positions[_marketId][msg.sender];
@@ -302,7 +351,310 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         emit SharesPurchased(_marketId, msg.sender, _isYes, shares, msg.value, _isYes ? finalYesPrice : finalNoPrice);
     }
 
-    // Sell shares
+    // ============ USER-TO-USER SELL ORDER SYSTEM ============
+    // Selling shares creates an order that must be matched by a buyer
+    // No instant selling - all trades are user-to-user
+    
+    /**
+     * @dev Internal function to match a sell order with a limit order
+     * @param _sellOrderId The sell order ID to match
+     * @return matched Whether a match was found and executed
+     * @return matchedOrderId The limit order ID that was matched (0 if no match)
+     */
+    function _tryMatchSellOrderWithLimitOrder(uint256 _sellOrderId) internal returns (bool matched, uint256 matchedOrderId) {
+        SellOrder storage sellOrder = allSellOrders[_sellOrderId];
+        if (sellOrder.filled || sellOrder.cancelled) {
+            return (false, 0);
+        }
+
+        // Convert sell order price to basis points for comparison
+        uint256 sellPriceBasisPoints = (sellOrder.pricePerShare * 10000) / 1 ether;
+        
+        // Find matching limit order (same market, same side, same price)
+        uint256[] storage limitOrderIds = marketLimitOrders[sellOrder.marketId];
+        
+        for (uint256 i = 0; i < limitOrderIds.length; i++) {
+            LimitOrder storage limitOrder = allLimitOrders[limitOrderIds[i]];
+            
+            // Check if limit order matches:
+            // 1. Not filled or cancelled
+            // 2. Same side (both YES or both NO)
+            // 3. Same price (within 1 basis point tolerance for rounding)
+            // 4. Limit order has enough ETH to buy the shares
+            if (!limitOrder.filled && 
+                !limitOrder.cancelled && 
+                limitOrder.isYes == sellOrder.isYes &&
+                (limitOrder.price >= sellPriceBasisPoints ? limitOrder.price - sellPriceBasisPoints : sellPriceBasisPoints - limitOrder.price) <= 1) {
+                
+                // Calculate how many shares the limit order can buy
+                // Limit order amount is in ETH, we need to calculate shares at the price
+                uint256 sharesLimitOrderCanBuy = (limitOrder.amount * 10000) / limitOrder.price;
+                
+                // Match the minimum of what seller wants to sell and what buyer wants to buy
+                uint256 sharesToTrade = sellOrder.shares < sharesLimitOrderCanBuy ? sellOrder.shares : sharesLimitOrderCanBuy;
+                
+                if (sharesToTrade > 0) {
+                    // Execute the match
+                    uint256 totalCost = sharesToTrade * sellOrder.pricePerShare;
+                    uint256 platformFee = (totalCost * platformFeePercent) / 10000;
+                    uint256 sellerPayout = totalCost - platformFee;
+                    
+                    // Mark orders as filled (or partially filled)
+                    if (sharesToTrade == sellOrder.shares) {
+                        sellOrder.filled = true;
+                    } else {
+                        // Partial fill - reduce sell order shares
+                        sellOrder.shares -= sharesToTrade;
+                    }
+                    
+                    if (sharesToTrade == sharesLimitOrderCanBuy) {
+                        limitOrder.filled = true;
+                        limitOrder.amount = 0;
+                    } else {
+                        // Partial fill - reduce limit order amount
+                        limitOrder.amount -= totalCost;
+                    }
+                    
+                    // Transfer shares to limit order buyer
+                    Position storage buyerPosition = positions[sellOrder.marketId][limitOrder.trader];
+                    if (sellOrder.isYes) {
+                        buyerPosition.yesShares += sharesToTrade;
+                    } else {
+                        buyerPosition.noShares += sharesToTrade;
+                    }
+                    buyerPosition.totalInvested += totalCost;
+                    
+                    // Pay seller
+                    payable(sellOrder.seller).transfer(sellerPayout);
+                    
+                    // Refund excess ETH from limit order if any
+                    if (limitOrder.amount > 0 && limitOrder.filled) {
+                        payable(limitOrder.trader).transfer(limitOrder.amount);
+                    }
+                    
+                    // Record trade
+                    allTrades.push(Trade({
+                        marketId: sellOrder.marketId,
+                        trader: limitOrder.trader,
+                        isYes: sellOrder.isYes,
+                        shares: sharesToTrade,
+                        price: sellPriceBasisPoints,
+                        timestamp: block.timestamp
+                    }));
+                    
+                    Market storage market = markets[sellOrder.marketId];
+                    market.totalVolume += totalCost;
+                    
+                    emit SellOrderMatched(_sellOrderId, sellOrder.marketId, limitOrder.trader, sellOrder.seller, sharesToTrade, totalCost);
+                    emit SharesSold(sellOrder.marketId, sellOrder.seller, sellOrder.isYes, sharesToTrade, sellerPayout, sellPriceBasisPoints);
+                    emit SharesPurchased(sellOrder.marketId, limitOrder.trader, sellOrder.isYes, sharesToTrade, totalCost, sellPriceBasisPoints);
+                    
+                    return (true, limitOrderIds[i]);
+                }
+            }
+        }
+        
+        return (false, 0);
+    }
+
+    /**
+     * @dev Place a sell order for shares (user-to-user model)
+     * Shares are locked until order is filled or cancelled
+     * Automatically matches with existing limit orders at the same price
+     * @param _marketId The market ID
+     * @param _isYes True for YES shares, false for NO shares
+     * @param _shares Number of shares to sell
+     * @param _pricePerShare Price per share in wei (e.g., 0.5 ETH = 5e17 wei)
+     */
+    function placeSellOrder(uint256 _marketId, bool _isYes, uint256 _shares, uint256 _pricePerShare) external nonReentrant {
+        Market storage market = markets[_marketId];
+        require(market.active, "Market not active");
+        require(!market.resolved, "Market already resolved");
+        require(block.timestamp < market.endTime, "Market has ended");
+        require(_shares > 0, "Must sell at least some shares");
+        require(_pricePerShare > 0, "Price must be positive");
+
+        Position storage position = positions[_marketId][msg.sender];
+        
+        // Check user has enough shares
+        if (_isYes) {
+            require(position.yesShares >= _shares, "Insufficient YES shares");
+            // Lock shares by removing from position
+            position.yesShares -= _shares;
+        } else {
+            require(position.noShares >= _shares, "Insufficient NO shares");
+            // Lock shares by removing from position
+            position.noShares -= _shares;
+        }
+
+        // Create sell order
+        uint256 orderId = allSellOrders.length;
+        allSellOrders.push(SellOrder({
+            id: orderId,
+            marketId: _marketId,
+            seller: msg.sender,
+            isYes: _isYes,
+            shares: _shares,
+            pricePerShare: _pricePerShare,
+            timestamp: block.timestamp,
+            filled: false,
+            cancelled: false
+        }));
+
+        // Track order in mappings
+        marketSellOrders[_marketId].push(orderId);
+        userSellOrders[msg.sender].push(orderId);
+
+        emit SellOrderPlaced(orderId, _marketId, msg.sender, _isYes, _shares, _pricePerShare);
+        
+        // Try to match with existing limit orders
+        _tryMatchSellOrderWithLimitOrder(orderId);
+        
+        // If fully matched, the order is already filled
+        // If partially matched or not matched, the order remains open
+    }
+
+    /**
+     * @dev Buy shares from an existing sell order (user-to-user trade)
+     * Buyer pays the seller directly
+     * @param _orderId The sell order ID to buy from
+     */
+    function buyFromSellOrder(uint256 _orderId) external payable nonReentrant {
+        require(_orderId < allSellOrders.length, "Order does not exist");
+        SellOrder storage order = allSellOrders[_orderId];
+        
+        require(!order.filled, "Order already filled");
+        require(!order.cancelled, "Order was cancelled");
+        
+        Market storage market = markets[order.marketId];
+        require(market.active, "Market not active");
+        require(!market.resolved, "Market already resolved");
+        require(block.timestamp < market.endTime, "Market has ended");
+        
+        // Calculate total cost
+        uint256 totalCost = order.shares * order.pricePerShare;
+        require(msg.value >= totalCost, "Insufficient payment");
+        
+        // Calculate platform fee (2%)
+        uint256 platformFee = (totalCost * platformFeePercent) / 10000;
+        uint256 sellerPayout = totalCost - platformFee;
+        
+        // Mark order as filled
+        order.filled = true;
+        
+        // Transfer shares to buyer
+        Position storage buyerPosition = positions[order.marketId][msg.sender];
+        if (order.isYes) {
+            buyerPosition.yesShares += order.shares;
+        } else {
+            buyerPosition.noShares += order.shares;
+        }
+        buyerPosition.totalInvested += totalCost;
+        
+        // Note: We don't reduce market.totalYesShares/totalNoShares because
+        // shares are just transferred between users, not created/destroyed
+        // The total shares in circulation remain the same
+
+        // Record trade
+        allTrades.push(Trade({
+            marketId: order.marketId,
+            trader: msg.sender,
+            isYes: order.isYes,
+            shares: order.shares,
+            price: (order.pricePerShare * 10000) / 1 ether, // Convert to basis points
+            timestamp: block.timestamp
+        }));
+        
+        // Pay seller
+        payable(order.seller).transfer(sellerPayout);
+        
+        // Refund excess payment
+        if (msg.value > totalCost) {
+            payable(msg.sender).transfer(msg.value - totalCost);
+        }
+        
+        // Update market volume
+        market.totalVolume += totalCost;
+        
+        emit SellOrderMatched(_orderId, order.marketId, msg.sender, order.seller, order.shares, totalCost);
+        emit SharesSold(order.marketId, order.seller, order.isYes, order.shares, sellerPayout, (order.pricePerShare * 10000) / 1 ether);
+    }
+
+    /**
+     * @dev Cancel a sell order and return shares to seller
+     * @param _orderId The sell order ID to cancel
+     */
+    function cancelSellOrder(uint256 _orderId) external nonReentrant {
+        require(_orderId < allSellOrders.length, "Order does not exist");
+        SellOrder storage order = allSellOrders[_orderId];
+        
+        require(order.seller == msg.sender, "Not your order");
+        require(!order.filled, "Order already filled");
+        require(!order.cancelled, "Order already cancelled");
+        
+        // Mark as cancelled
+        order.cancelled = true;
+        
+        // Return shares to seller
+        Position storage position = positions[order.marketId][msg.sender];
+        if (order.isYes) {
+            position.yesShares += order.shares;
+        } else {
+            position.noShares += order.shares;
+        }
+        
+        emit SellOrderCancelled(_orderId, order.marketId, msg.sender);
+    }
+
+    /**
+     * @dev Get all active sell orders for a market
+     * @param _marketId The market ID
+     * @return activeSellOrders Array of active sell orders
+     */
+    function getMarketSellOrders(uint256 _marketId) external view returns (SellOrder[] memory) {
+        uint256[] storage orderIds = marketSellOrders[_marketId];
+        
+        // Count active orders
+        uint256 activeCount = 0;
+        for (uint256 i = 0; i < orderIds.length; i++) {
+            SellOrder storage order = allSellOrders[orderIds[i]];
+            if (!order.filled && !order.cancelled) {
+                activeCount++;
+            }
+        }
+        
+        // Build result array
+        SellOrder[] memory activeSellOrders = new SellOrder[](activeCount);
+        uint256 index = 0;
+        for (uint256 i = 0; i < orderIds.length; i++) {
+            SellOrder storage order = allSellOrders[orderIds[i]];
+            if (!order.filled && !order.cancelled) {
+                activeSellOrders[index] = order;
+                index++;
+            }
+        }
+        
+        return activeSellOrders;
+    }
+
+    /**
+     * @dev Get all sell orders for a user
+     * @param _user The user address
+     * @return userOrders Array of user's sell orders
+     */
+    function getUserSellOrders(address _user) external view returns (SellOrder[] memory) {
+        uint256[] storage orderIds = userSellOrders[_user];
+        SellOrder[] memory userOrders = new SellOrder[](orderIds.length);
+        
+        for (uint256 i = 0; i < orderIds.length; i++) {
+            userOrders[i] = allSellOrders[orderIds[i]];
+        }
+        
+        return userOrders;
+    }
+
+    // Legacy sellShares function - redirects to placeSellOrder with current market price
+    // This maintains backward compatibility with existing frontends
     function sellShares(uint256 _marketId, bool _isYes, uint256 _shares) external nonReentrant {
         Market storage market = markets[_marketId];
         require(market.active, "Market not active");
@@ -315,58 +667,40 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         // Check user has enough shares
         if (_isYes) {
             require(position.yesShares >= _shares, "Insufficient YES shares");
+            position.yesShares -= _shares;
         } else {
             require(position.noShares >= _shares, "Insufficient NO shares");
+            position.noShares -= _shares;
         }
 
-        // Get current price before the sale
+        // Get current price from AMM to set default sell price
         (uint256 currentYesPrice, uint256 currentNoPrice) = pricingAMM.calculatePrice(_marketId);
         uint256 currentPrice = _isYes ? currentYesPrice : currentNoPrice;
         
-        // AMM clamps prices to 100-9900 basis points (1%-99%), allow trading at any valid price
-        require(currentPrice > 0, "Invalid price");
+        // Convert basis points to wei price per share
+        // If price is 5000 basis points (50%), price per share = 0.5 ETH
+        uint256 pricePerShare = (currentPrice * 1 ether) / 10000;
         
-        // Calculate payout: shares * currentPrice / 10000 (convert from basis points)
-        // Apply a small fee (2%)
-        uint256 payout = (_shares * currentPrice) / 10000;
-        uint256 platformFee = (payout * 200) / 10000; // 2% fee
-        uint256 userPayout = payout - platformFee;
-
-        // Update user position FIRST (before any external calls to prevent reentrancy)
-        if (_isYes) {
-            position.yesShares -= _shares;
-            market.totalYesShares -= _shares;
-        } else {
-            position.noShares -= _shares;
-            market.totalNoShares -= _shares;
-        }
-
-        // Update AMM state to match our market state for accurate price calculations
-        pricingAMM.updateMarketState(_marketId, market.totalYesShares, market.totalNoShares);
-
-        // Update total volume
-        market.totalVolume += payout;
-
-        // Transfer ETH to user if there's balance, otherwise just update state
-        if (address(this).balance >= userPayout) {
-            payable(msg.sender).transfer(userPayout);
-        } else if (address(this).balance > 0) {
-            // Transfer what we can
-            payable(msg.sender).transfer(address(this).balance);
-        }
-        // If no balance, the market is just transitioning without payout
-
-        // Record trade
-        allTrades.push(Trade({
+        // Create sell order
+        uint256 orderId = allSellOrders.length;
+        allSellOrders.push(SellOrder({
+            id: orderId,
             marketId: _marketId,
-            trader: msg.sender,
+            seller: msg.sender,
             isYes: _isYes,
             shares: _shares,
-            price: currentPrice,
-            timestamp: block.timestamp
+            pricePerShare: pricePerShare,
+            timestamp: block.timestamp,
+            filled: false,
+            cancelled: false
         }));
 
-        emit SharesSold(_marketId, msg.sender, _isYes, _shares, userPayout, currentPrice);
+        // Track order in mappings
+        marketSellOrders[_marketId].push(orderId);
+        userSellOrders[msg.sender].push(orderId);
+
+        emit SellOrderPlaced(orderId, _marketId, msg.sender, _isYes, _shares, pricePerShare);
+        // Note: SharesSold event is emitted when order is matched, not when placed
     }
 
     // ============ Optimistic Oracle Resolution Functions ============
@@ -600,7 +934,9 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         emit MarketResolved(_marketId, outcome, market.totalVolume);
     }
 
-    // Claim winnings after market resolution
+    // Claim winnings after market resolution - PARI-MUTUEL MODEL
+    // Winners split the TOTAL POOL (all funds from both sides)
+    // Payout per winning share = totalPool / totalWinningShares
     function claimWinnings(uint256 _marketId) external nonReentrant {
         Market storage market = markets[_marketId];
         require(market.resolved, "Market not resolved");
@@ -611,28 +947,38 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         uint256 payout = 0;
         
         if (market.outcome == 1 && position.yesShares > 0) {
-            // YES won - pay 1 TCENT (1 ether) per share
-            payout = position.yesShares; // 1 ether per share directly
+            // YES won - winners split the entire pool proportionally
+            // Each winning share gets: totalPool / totalYesShares
+            require(market.totalYesShares > 0, "No winning shares");
+            payout = (market.totalPool * position.yesShares) / market.totalYesShares;
             position.yesShares = 0;
-        } else if (market.outcome == 2 && position.noShares > 0) {
-            // NO won - pay 1 TCENT (1 ether) per share
-            payout = position.noShares; // 1 ether per share directly
+            // Also clear any NO shares (they lost)
             position.noShares = 0;
+        } else if (market.outcome == 2 && position.noShares > 0) {
+            // NO won - winners split the entire pool proportionally
+            // Each winning share gets: totalPool / totalNoShares
+            require(market.totalNoShares > 0, "No winning shares");
+            payout = (market.totalPool * position.noShares) / market.totalNoShares;
+            position.noShares = 0;
+            // Also clear any YES shares (they lost)
+            position.yesShares = 0;
         } else if (market.outcome == 3) {
-            // INVALID - refund proportionally
+            // INVALID - refund proportionally based on total invested
             uint256 totalShares = position.yesShares + position.noShares;
-            if (totalShares > 0) {
-                payout = (position.totalInvested * totalShares) / totalShares;
+            uint256 totalMarketShares = market.totalYesShares + market.totalNoShares;
+            if (totalShares > 0 && totalMarketShares > 0) {
+                // Refund based on share proportion of total pool
+                payout = (market.totalPool * totalShares) / totalMarketShares;
             }
             position.yesShares = 0;
             position.noShares = 0;
         } else {
-            // User lost - no payout, shares are forfeited (contract keeps the funds)
+            // User only has losing shares - no payout
             // Clear losing shares
             if (market.outcome == 1 && position.noShares > 0) {
-                position.noShares = 0; // NO shares lost - forfeited to contract
+                position.noShares = 0; // NO shares lost - their stake goes to YES winners
             } else if (market.outcome == 2 && position.yesShares > 0) {
-                position.yesShares = 0; // YES shares lost - forfeited to contract
+                position.yesShares = 0; // YES shares lost - their stake goes to NO winners
             }
             // Payout remains 0 for losers
         }
@@ -676,7 +1022,110 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         return _isYes ? yesPrice : noPrice;
     }
 
+    /**
+     * @dev Internal function to match a limit order with a sell order
+     * @param _limitOrderId The limit order ID to match
+     * @return matched Whether a match was found and executed
+     * @return matchedSellOrderId The sell order ID that was matched (0 if no match)
+     */
+    function _tryMatchLimitOrderWithSellOrder(uint256 _limitOrderId) internal returns (bool matched, uint256 matchedSellOrderId) {
+        LimitOrder storage limitOrder = allLimitOrders[_limitOrderId];
+        if (limitOrder.filled || limitOrder.cancelled || limitOrder.amount == 0) {
+            return (false, 0);
+        }
+
+        // Convert limit order price to wei per share for comparison
+        uint256 limitPricePerShare = (limitOrder.price * 1 ether) / 10000;
+        
+        // Find matching sell order (same market, same side, same price)
+        uint256[] storage sellOrderIds = marketSellOrders[limitOrder.marketId];
+        
+        for (uint256 i = 0; i < sellOrderIds.length; i++) {
+            SellOrder storage sellOrder = allSellOrders[sellOrderIds[i]];
+            
+            // Check if sell order matches:
+            // 1. Not filled or cancelled
+            // 2. Same side (both YES or both NO)
+            // 3. Same price (within 1 wei tolerance for rounding)
+            if (!sellOrder.filled && 
+                !sellOrder.cancelled && 
+                sellOrder.isYes == limitOrder.isYes &&
+                (sellOrder.pricePerShare >= limitPricePerShare ? 
+                    sellOrder.pricePerShare - limitPricePerShare : 
+                    limitPricePerShare - sellOrder.pricePerShare) <= 1) {
+                
+                // Calculate how many shares the limit order can buy
+                uint256 sharesLimitOrderCanBuy = (limitOrder.amount * 10000) / limitOrder.price;
+                
+                // Match the minimum of what seller wants to sell and what buyer wants to buy
+                uint256 sharesToTrade = sellOrder.shares < sharesLimitOrderCanBuy ? sellOrder.shares : sharesLimitOrderCanBuy;
+                
+                if (sharesToTrade > 0) {
+                    // Execute the match
+                    uint256 totalCost = sharesToTrade * sellOrder.pricePerShare;
+                    uint256 platformFee = (totalCost * platformFeePercent) / 10000;
+                    uint256 sellerPayout = totalCost - platformFee;
+                    
+                    // Mark orders as filled (or partially filled)
+                    if (sharesToTrade == sellOrder.shares) {
+                        sellOrder.filled = true;
+                    } else {
+                        // Partial fill - reduce sell order shares
+                        sellOrder.shares -= sharesToTrade;
+                    }
+                    
+                    if (sharesToTrade == sharesLimitOrderCanBuy) {
+                        limitOrder.filled = true;
+                        limitOrder.amount = 0;
+                    } else {
+                        // Partial fill - reduce limit order amount
+                        limitOrder.amount -= totalCost;
+                    }
+                    
+                    // Transfer shares to limit order buyer
+                    Position storage buyerPosition = positions[limitOrder.marketId][limitOrder.trader];
+                    if (sellOrder.isYes) {
+                        buyerPosition.yesShares += sharesToTrade;
+                    } else {
+                        buyerPosition.noShares += sharesToTrade;
+                    }
+                    buyerPosition.totalInvested += totalCost;
+                    
+                    // Pay seller
+                    payable(sellOrder.seller).transfer(sellerPayout);
+                    
+                    // Refund excess ETH from limit order if any
+                    if (limitOrder.amount > 0 && limitOrder.filled) {
+                        payable(limitOrder.trader).transfer(limitOrder.amount);
+                    }
+                    
+                    // Record trade
+                    allTrades.push(Trade({
+                        marketId: limitOrder.marketId,
+                        trader: limitOrder.trader,
+                        isYes: sellOrder.isYes,
+                        shares: sharesToTrade,
+                        price: limitOrder.price,
+                        timestamp: block.timestamp
+                    }));
+                    
+                    Market storage market = markets[limitOrder.marketId];
+                    market.totalVolume += totalCost;
+                    
+                    emit SellOrderMatched(sellOrderIds[i], limitOrder.marketId, limitOrder.trader, sellOrder.seller, sharesToTrade, totalCost);
+                    emit SharesSold(limitOrder.marketId, sellOrder.seller, sellOrder.isYes, sharesToTrade, sellerPayout, limitOrder.price);
+                    emit SharesPurchased(limitOrder.marketId, limitOrder.trader, sellOrder.isYes, sharesToTrade, totalCost, limitOrder.price);
+                    
+                    return (true, sellOrderIds[i]);
+                }
+            }
+        }
+        
+        return (false, 0);
+    }
+
     // Place a limit order (Polymarket style)
+    // Automatically matches with existing sell orders at the same price
     function placeLimitOrder(
         uint256 _marketId,
         bool _isYes,
@@ -724,6 +1173,22 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         }
 
         emit LimitOrderPlaced(_marketId, msg.sender, _isYes, _price, _amount);
+        
+        // Try to match with existing sell orders
+        _tryMatchLimitOrderWithSellOrder(orderId);
+        
+        // If fully matched, the order is already filled
+        // If partially matched or not matched, the order remains open
+        // Refund any excess ETH sent (if user sent more than _amount)
+        if (msg.value > _amount) {
+            payable(msg.sender).transfer(msg.value - _amount);
+        }
+        
+        // Refund remaining ETH if order was fully filled
+        if (allLimitOrders[orderId].filled && allLimitOrders[orderId].amount > 0) {
+            payable(msg.sender).transfer(allLimitOrders[orderId].amount);
+            allLimitOrders[orderId].amount = 0;
+        }
     }
 
     // View functions
@@ -762,6 +1227,68 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         return trades;
     }
 
+    /**
+     * @dev Get sell order by ID
+     * @param _orderId The sell order ID
+     * @return The sell order
+     */
+    function getSellOrder(uint256 _orderId) external view returns (SellOrder memory) {
+        require(_orderId < allSellOrders.length, "Order does not exist");
+        return allSellOrders[_orderId];
+    }
+
+    /**
+     * @dev Calculate potential payout for a user's position (PARI-MUTUEL)
+     * Shows what user would receive if their side wins
+     * @param _marketId The market ID
+     * @param _user The user address
+     * @param _isYes Calculate for YES win (true) or NO win (false)
+     * @return potentialPayout The amount user would receive if that side wins
+     */
+    function calculatePotentialPayout(uint256 _marketId, address _user, bool _isYes) external view returns (uint256 potentialPayout) {
+        Market storage market = markets[_marketId];
+        Position storage position = positions[_marketId][_user];
+        
+        if (_isYes) {
+            // If YES wins, YES holders split the pool
+            if (market.totalYesShares > 0 && position.yesShares > 0) {
+                potentialPayout = (market.totalPool * position.yesShares) / market.totalYesShares;
+            }
+        } else {
+            // If NO wins, NO holders split the pool
+            if (market.totalNoShares > 0 && position.noShares > 0) {
+                potentialPayout = (market.totalPool * position.noShares) / market.totalNoShares;
+            }
+        }
+    }
+
+    /**
+     * @dev Get current payout ratio per share (PARI-MUTUEL)
+     * @param _marketId The market ID
+     * @param _isYes Calculate for YES (true) or NO (false)
+     * @return payoutPerShare The payout per share in wei if that side wins
+     */
+    function getPayoutPerShare(uint256 _marketId, bool _isYes) external view returns (uint256 payoutPerShare) {
+        Market storage market = markets[_marketId];
+        
+        if (_isYes) {
+            if (market.totalYesShares > 0) {
+                payoutPerShare = market.totalPool / market.totalYesShares;
+            }
+        } else {
+            if (market.totalNoShares > 0) {
+                payoutPerShare = market.totalPool / market.totalNoShares;
+            }
+        }
+    }
+
+    /**
+     * @dev Get total sell orders count
+     */
+    function getTotalSellOrdersCount() external view returns (uint256) {
+        return allSellOrders.length;
+    }
+
     // Admin functions
     function setMarketCreationFee(uint256 _fee) external onlyOwner {
         marketCreationFee = _fee;
@@ -778,10 +1305,11 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
 
     /**
      * @dev Receive function to accept ETH/TCENT deposits
-     * Anyone can deposit ETH to provide liquidity for payouts
-     * These funds will be used to:
-     * 1. Pay users when they sell shares
-     * 2. Pay winners when they claim winnings (1 TCENT per share)
+     * Note: In pari-mutuel model, payouts come from user investments
+     * This receive function is mainly for:
+     * 1. Platform fee collection
+     * 2. Emergency liquidity if needed
+     * 3. Market creation fees
      */
     receive() external payable {
         emit Deposited(msg.sender, msg.value);

@@ -303,6 +303,7 @@ const WormStyleNavbar = () => {
     approved: 'text-green-300',
     rejected: 'text-red-300',
     info: 'text-white/70',
+    
   }), []);
 
   const markAsRead = useCallback(async (notificationId) => {
