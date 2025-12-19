@@ -169,20 +169,26 @@ const WormStyleNavbar = () => {
                 let shares = 0;
                 // Extract shares from message for MARKET_RESOLVED notifications
                 if (n.type === 'MARKET_RESOLVED' && n.message) {
-                  // Try to extract from "You won X.XXXX TCENT" format first
-                  const amountMatch = n.message.match(/You won ([\d.]+) TCENT/);
-                  if (amountMatch) {
-                    shares = parseFloat(amountMatch[1]) || 0;
+                  // Try to extract from new format: "You won X.XXXX ETH from the total pool... (Y.YYYY shares)"
+                  const newFormatMatch = n.message.match(/You won ([\d.]+) ETH.*?\(([\d.]+) shares\)/);
+                  if (newFormatMatch) {
+                    shares = parseFloat(newFormatMatch[2]) || 0; // Extract shares from parentheses
                   } else {
-                    // Fallback: try to extract from "(X.XXXX shares × 1 TCENT per share)" format
-                    const sharesMatch = n.message.match(/\(([\d.]+) shares/);
-                    if (sharesMatch) {
-                      shares = parseFloat(sharesMatch[1]) || 0;
+                    // Fallback: try old format "You won X.XXXX TCENT"
+                    const amountMatch = n.message.match(/You won ([\d.]+) (TCENT|ETH)/);
+                    if (amountMatch) {
+                      shares = parseFloat(amountMatch[1]) || 0;
                     } else {
-                      // Last fallback: try "have X winning shares" format
-                      const fallbackMatch = n.message.match(/have ([\d.]+) winning shares/);
-                      if (fallbackMatch) {
-                        shares = parseFloat(fallbackMatch[1]) || 0;
+                      // Fallback: try to extract from "(X.XXXX shares × 1 TCENT per share)" format (old format)
+                      const sharesMatch = n.message.match(/\(([\d.]+) shares/);
+                      if (sharesMatch) {
+                        shares = parseFloat(sharesMatch[1]) || 0;
+                      } else {
+                        // Last fallback: try "have X winning shares" format
+                        const fallbackMatch = n.message.match(/have ([\d.]+) winning shares/);
+                        if (fallbackMatch) {
+                          shares = parseFloat(fallbackMatch[1]) || 0;
+                        }
                       }
                     }
                   }

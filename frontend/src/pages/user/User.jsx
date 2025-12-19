@@ -156,10 +156,13 @@ const UserProfile = () => {
                 let isWinner = false;
 
                 if (market.resolved && market.outcome !== 0) {
-                  // Market resolved - calculate actual winnings
+                  // Market resolved - calculate actual winnings using pari-mutuel model
                   const totalYesShares = market.totalYesShares;
                   const totalNoShares = market.totalNoShares;
-                  const totalPool = totalYesShares.add(totalNoShares);
+                  // Use actual totalPool from contract (tracks invested ETH minus fees), fallback to sum if not available
+                  const totalPool = market.totalPool && market.totalPool.gt(0) 
+                    ? market.totalPool 
+                    : totalYesShares.add(totalNoShares);
 
                   if (market.outcome === 1 && yesShares.gt(0)) {
                     // YES won

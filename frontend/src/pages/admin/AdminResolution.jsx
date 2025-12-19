@@ -269,11 +269,18 @@ const AdminResolution = () => {
         }
       }
 
+      // Get market data to access totalPool for pari-mutuel calculations
+      const marketData = await getMarketData(marketId);
+      const totalPool = BigInt(marketData.totalPool || '0');
+      const totalYesShares = BigInt(marketData.totalYesShares || '0');
+      const totalNoShares = BigInt(marketData.totalNoShares || '0');
+
       // Create notifications for all participants
       const outcomeName = outcome === 1 ? 'YES' : outcome === 2 ? 'NO' : 'INVALID';
       let notificationsCreated = 0;
 
       console.log(`Creating notifications for ${participants.length} participants...`);
+      console.log(`Market total pool: ${totalPool.toString()}, YES shares: ${totalYesShares.toString()}, NO shares: ${totalNoShares.toString()}`);
 
       for (const participant of participants) {
         const yesShares = BigInt(participant.yesShares || '0');
@@ -288,22 +295,28 @@ const AdminResolution = () => {
 
         let won = false;
         let shares = '0';
-        let amountWonTCENT = '0'; // Amount in TCENT (1 TCENT = 1 ether = 1e18 wei)
+        let amountWon = '0'; // Amount in wei (will be calculated from totalPool)
         
         if (outcome === 1 && hasYesShares) {
-          // YES won and user has YES shares
+          // YES won and user has YES shares - calculate pari-mutuel payout
           won = true;
-          const sharesBN = yesShares / BigInt(1e18);
-          shares = sharesBN.toString();
-          amountWonTCENT = shares; // 1 TCENT per share, so shares = amount in TCENT
-          console.log(`✅ ${participant.userAddress} WON with ${shares} YES shares = ${amountWonTCENT} TCENT`);
+          shares = (yesShares / BigInt(1e18)).toString();
+          
+          // Pari-mutuel: payout = (totalPool * userShares) / totalWinningShares
+          if (totalYesShares > 0n && totalPool > 0n) {
+            amountWon = (totalPool * yesShares / totalYesShares).toString();
+          }
+          console.log(`✅ ${participant.userAddress} WON with ${shares} YES shares = ${(BigInt(amountWon) / BigInt(1e18)).toString()} ETH from pool`);
         } else if (outcome === 2 && hasNoShares) {
-          // NO won and user has NO shares
+          // NO won and user has NO shares - calculate pari-mutuel payout
           won = true;
-          const sharesBN = noShares / BigInt(1e18);
-          shares = sharesBN.toString();
-          amountWonTCENT = shares; // 1 TCENT per share
-          console.log(`✅ ${participant.userAddress} WON with ${shares} NO shares = ${amountWonTCENT} TCENT`);
+          shares = (noShares / BigInt(1e18)).toString();
+          
+          // Pari-mutuel: payout = (totalPool * userShares) / totalWinningShares
+          if (totalNoShares > 0n && totalPool > 0n) {
+            amountWon = (totalPool * noShares / totalNoShares).toString();
+          }
+          console.log(`✅ ${participant.userAddress} WON with ${shares} NO shares = ${(BigInt(amountWon) / BigInt(1e18)).toString()} ETH from pool`);
         } else if (outcome === 1 && hasNoShares) {
           // YES won but user has NO shares - lost
           won = false;
@@ -320,9 +333,11 @@ const AdminResolution = () => {
           continue;
         }
 
-        // Format amount with proper decimals
-        const formattedAmount = parseFloat(amountWonTCENT).toFixed(4);
+        // Format amount with proper decimals (convert from wei to ETH)
+        const amountWonETH = (BigInt(amountWon) / BigInt(1e18)).toString();
+        const formattedAmount = parseFloat(amountWonETH).toFixed(6);
         const formattedShares = parseFloat(shares).toFixed(4);
+        const formattedPool = (totalPool / BigInt(1e18)).toString();
 
         // Create notification
         try {
@@ -331,7 +346,7 @@ const AdminResolution = () => {
             type: 'MARKET_RESOLVED',
             title: won ? `You Won! 🎉` : 'Market Resolved - You Lost',
             message: won
-              ? `Market "${market.question}" resolved to ${outcomeName}. You won ${formattedAmount} TCENT (${formattedShares} shares × 1 TCENT per share). Claim your winnings now!`
+              ? `Market "${market.question}" resolved to ${outcomeName}. You won ${formattedAmount} ETH from the total pool of ${formattedPool} ETH (${formattedShares} shares). Claim your winnings now!`
               : `Market "${market.question}" resolved to ${outcomeName}. Your ${formattedShares} shares lost.`,
             marketId: marketId.toString()
           };
@@ -416,7 +431,7 @@ const AdminResolution = () => {
               <p className="text-xs uppercase tracking-[0.3em] text-white/60 mb-2">Resolution Desk</p>
               <h1 className="text-3xl sm:text-4xl font-semibold text-white mb-3">Announce Market Winners</h1>
               <p className="text-gray-300 max-w-2xl">
-                Resolve completed markets by selecting the winning side. Winners receive 1&nbsp;TCENT per share and losers forfeit their
+                Resolve completed markets by selecting the winning side. Winners split the total pool proportionally based on their shares. Losers forfeit their
                 stake.
               </p>
             </div>

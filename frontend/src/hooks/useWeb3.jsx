@@ -663,7 +663,7 @@ export const Web3Provider = ({ children }) => {
         active: market.active,
         yesPrice: yesPrice,
         noPrice: noPrice,
-        totalPool: (parseInt(market.totalYesShares.toString()) + parseInt(market.totalNoShares.toString())).toString()
+        totalPool: market.totalPool ? market.totalPool.toString() : (parseInt(market.totalYesShares.toString()) + parseInt(market.totalNoShares.toString())).toString()
       };
     } catch (err) {
       console.error('Failed to get market data:', err);
