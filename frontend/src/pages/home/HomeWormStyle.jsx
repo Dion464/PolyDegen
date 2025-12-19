@@ -285,6 +285,9 @@ const HomeWormStyle = () => {
               // Skip inactive/resolved markets
               if (!market.active || market.resolved) return null;
               
+              // Skip markets without valid question
+              if (!market.question || market.question.trim() === '') return null;
+              
               const marketIdStr = marketId.toString();
               const totalYesShares = parseFloat(ethers.utils.formatEther(market.totalYesShares));
               const totalNoShares = parseFloat(ethers.utils.formatEther(market.totalNoShares));
@@ -423,23 +426,33 @@ const HomeWormStyle = () => {
   // Update markets when live markets data changes (from WebSocket/polling)
   useEffect(() => {
     if (liveMarkets && liveMarkets.length > 0) {
-      // Merge with existing markets, prioritizing live data
-      setMarkets(prev => {
-        const merged = [...prev];
-        liveMarkets.forEach(liveMarket => {
-          const index = merged.findIndex(m => 
-            m.id === liveMarket.id || 
-            m.marketId === liveMarket.id ||
-            m.id === liveMarket.marketId
+      // Filter out invalid markets first
+      const validLiveMarkets = liveMarkets.filter(m => 
+        m && m.id && m.question && m.question.trim() !== '' && m.active && !m.resolved
+      );
+      
+      if (validLiveMarkets.length > 0) {
+        // Merge with existing markets, prioritizing live data
+        setMarkets(prev => {
+          const merged = [...prev];
+          validLiveMarkets.forEach(liveMarket => {
+            const index = merged.findIndex(m => 
+              m.id === liveMarket.id || 
+              m.marketId === liveMarket.id ||
+              m.id === liveMarket.marketId
+            );
+            if (index >= 0) {
+              merged[index] = { ...merged[index], ...liveMarket };
+            } else {
+              merged.push(liveMarket);
+            }
+          });
+          // Filter out any invalid markets that might have been added
+          return merged.filter(m => 
+            m && m.id && m.question && m.question.trim() !== '' && m.active && !m.resolved
           );
-          if (index >= 0) {
-            merged[index] = { ...merged[index], ...liveMarket };
-          } else {
-            merged.push(liveMarket);
-          }
         });
-        return merged;
-      });
+      }
     }
   }, [liveMarkets]);
 
@@ -450,6 +463,16 @@ const HomeWormStyle = () => {
   };
 
   const filteredMarkets = markets.filter(market => {
+    // Filter out invalid/empty markets
+    if (!market || !market.id || !market.question || market.question.trim() === '') {
+      return false;
+    }
+    
+    // Only show active, non-resolved markets
+    if (market.resolved || !market.active) {
+      return false;
+    }
+    
     const matchesCategory = selectedCategory === 'All' || market.category === selectedCategory;
     const query = searchQuery.trim().toLowerCase();
     const matchesSearch = !query || 
@@ -941,21 +964,37 @@ const HomeWormStyle = () => {
         {loading && sortedMarkets.length === 0 ? (
           <MarketsGridSkeleton />
         ) : sortedMarkets.length === 0 && !loading ? (
-          <div className="text-center py-20">
-            <p className="text-gray-400 text-lg font-space-grotesk">
-              {searchQuery.trim() ? `No markets found for "${searchQuery}"` : 'No markets found'}
-            </p>
-            <p className="text-gray-500 text-sm mt-2 font-space-grotesk">
-              {searchQuery.trim() ? 'Try a different search term' : 'Try creating one or check back later!'}
-            </p>
-            {searchQuery.trim() && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="mt-4 px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all font-space-grotesk"
-              >
-                Clear Search
-              </button>
-            )}
+          <div className="text-center py-20 px-4">
+            <div className="max-w-md mx-auto">
+              <div className="mb-6">
+                <svg className="w-16 h-16 mx-auto text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <h3 className="text-white text-xl font-semibold mb-2 font-space-grotesk">
+                {searchQuery.trim() ? `No markets found` : 'No markets available'}
+              </h3>
+              <p className="text-gray-400 text-sm mb-6 font-space-grotesk">
+                {searchQuery.trim() 
+                  ? `No markets match "${searchQuery}". Try a different search term.`
+                  : 'There are currently no active prediction markets. Be the first to create one!'}
+              </p>
+              {searchQuery.trim() ? (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all font-space-grotesk text-sm"
+                >
+                  Clear Search
+                </button>
+              ) : (
+                <button
+                  onClick={() => history.push('/create')}
+                  className="px-6 py-2.5 bg-[#FFE600] hover:bg-[#FFE600]/80 text-black rounded-full transition-all font-space-grotesk font-semibold text-sm"
+                >
+                  Create Market
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">

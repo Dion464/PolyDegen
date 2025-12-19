@@ -410,6 +410,96 @@ const AdminResolution = () => {
 
       console.log(`✅ Created ${notificationsCreated} notifications for market ${marketId} (out of ${participants.length} participants)`);
 
+      // Batch payout all winners in one transaction
+      const winners = participants.filter(p => {
+        const yesShares = BigInt(p.yesShares || '0');
+        const noShares = BigInt(p.noShares || '0');
+        if (outcome === 1 && yesShares > 0n) return true;
+        if (outcome === 2 && noShares > 0n) return true;
+        if (outcome === 3 && (yesShares > 0n || noShares > 0n)) return true;
+        return false;
+      }).map(p => p.userAddress);
+
+      if (winners.length > 0) {
+        try {
+          console.log(`💰 Batch paying ${winners.length} winners in one transaction...`);
+          showGlassToast({ 
+            title: `Paying ${winners.length} winners...`, 
+            icon: '💰' 
+          });
+          
+          // Process in batches of 200 (gas limit protection)
+          const BATCH_SIZE = 200;
+          let totalPaid = 0;
+          let totalFees = 0;
+          
+          for (let i = 0; i < winners.length; i += BATCH_SIZE) {
+            const batch = winners.slice(i, i + BATCH_SIZE);
+            const batchTx = await contracts.predictionMarket.batchPayoutWinners(marketId, batch, {
+              gasLimit: 5000000 // Higher gas limit for batch operations
+            });
+            
+            showTransactionToast({ title: `Batch payout ${Math.floor(i/BATCH_SIZE) + 1}`, txHash: batchTx.hash });
+            const batchReceipt = await batchTx.wait();
+            
+            // Parse events to get payout amounts (ethers v5 format)
+            let batchTotalPaid = 0;
+            let batchTotalFees = 0;
+            
+            // Try to find the event in the receipt
+            if (batchReceipt.events) {
+              const batchPayoutEvent = batchReceipt.events.find(e => 
+                e.event === 'BatchPayoutCompleted' || 
+                (e.eventSignature && e.eventSignature.includes('BatchPayoutCompleted'))
+              );
+              if (batchPayoutEvent && batchPayoutEvent.args) {
+                batchTotalPaid = parseFloat(batchPayoutEvent.args.totalPaid?.toString() || '0') / 1e18;
+                batchTotalFees = parseFloat(batchPayoutEvent.args.totalFees?.toString() || '0') / 1e18;
+              }
+            }
+            
+            // Alternative: parse from logs
+            if (batchTotalPaid === 0 && batchReceipt.logs) {
+              try {
+                const iface = contracts.predictionMarket.interface;
+                for (const log of batchReceipt.logs) {
+                  try {
+                    const parsed = iface.parseLog(log);
+                    if (parsed.name === 'BatchPayoutCompleted') {
+                      batchTotalPaid = parseFloat(parsed.args.totalPaid?.toString() || '0') / 1e18;
+                      batchTotalFees = parseFloat(parsed.args.totalFees?.toString() || '0') / 1e18;
+                      break;
+                    }
+                  } catch (e) {
+                    // Not the event we're looking for
+                  }
+                }
+              } catch (e) {
+                console.warn('Could not parse batch payout event:', e);
+              }
+            }
+            
+            totalPaid += batchTotalPaid;
+            totalFees += batchTotalFees;
+            
+            console.log(`✅ Batch ${Math.floor(i/BATCH_SIZE) + 1} paid: ${batch.length} winners, ${batchTotalPaid.toFixed(6)} TCENT`);
+          }
+          
+          console.log(`✅ All winners paid! Total: ${totalPaid.toFixed(6)} TCENT, Fees: ${totalFees.toFixed(6)} TCENT`);
+          showGlassToast({ 
+            title: `✅ All ${winners.length} winners paid in one transaction!`, 
+            icon: '🎉' 
+          });
+        } catch (batchErr) {
+          console.error('❌ Batch payout failed:', batchErr);
+          showGlassToast({ 
+            title: `Batch payout failed. Winners can claim individually.`, 
+            icon: '⚠️' 
+          });
+          // Don't throw - allow individual claims to still work
+        }
+      }
+
       // Create activity event for market resolution
       try {
         await fetch(`${apiBaseUrl}/api/activity/create`, {

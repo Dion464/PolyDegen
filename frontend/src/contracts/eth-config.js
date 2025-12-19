@@ -35,6 +35,7 @@ export const CONTRACT_ABI = [
   // Resolution functions
   "function resolveMarket(uint256 _marketId, uint8 _outcome)",
   "function claimWinnings(uint256 _marketId)",
+  "function batchPayoutWinners(uint256 _marketId, address[] calldata _winners) returns (uint256 totalPaid, uint256 totalFees)",
   
   // View functions
   "function getUserPosition(uint256 _marketId, address _user) view returns (tuple(uint256 yesShares, uint256 noShares, uint256 totalInvested))",

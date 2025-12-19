@@ -173,6 +173,13 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         address indexed seller
     );
     
+    event BatchPayoutCompleted(
+        uint256 indexed marketId,
+        uint256 winnerCount,
+        uint256 totalPaid,
+        uint256 totalFees
+    );
+    
     // Optimistic Oracle Events
     event ResolutionProposed(
         uint256 indexed marketId,
@@ -949,6 +956,114 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         }
 
         emit MarketResolved(_marketId, outcome, market.totalVolume);
+    }
+
+    /**
+     * @dev Batch payout all winners in a single transaction
+     * @param _marketId The market ID
+     * @param _winners Array of winner addresses to pay
+     * @return totalPaid Total amount paid to all winners
+     * @return totalFees Total platform fees collected
+     */
+    function batchPayoutWinners(uint256 _marketId, address[] calldata _winners) external nonReentrant returns (uint256 totalPaid, uint256 totalFees) {
+        Market storage market = markets[_marketId];
+        require(market.resolved, "Market not resolved");
+        require(_winners.length > 0, "No winners provided");
+        require(_winners.length <= 200, "Too many winners (max 200 per batch)"); // Gas limit protection
+        
+        uint256 totalPayout = 0;
+        uint256 totalPlatformFees = 0;
+        
+        // Process each winner
+        for (uint256 i = 0; i < _winners.length; i++) {
+            address winner = _winners[i];
+            Position storage position = positions[_marketId][winner];
+            
+            // Skip if no position
+            if (position.yesShares == 0 && position.noShares == 0) {
+                continue;
+            }
+            
+            uint256 grossPayout = 0;
+            uint256 userInvestment = 0;
+            uint256 losingPoolShare = 0;
+            
+            if (market.outcome == 1 && position.yesShares > 0) {
+                // YES won
+                require(market.totalYesShares > 0, "No winning shares");
+                userInvestment = position.yesInvested;
+                
+                if (market.totalYesShares > 0 && market.noPool > 0) {
+                    losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
+                }
+                
+                grossPayout = userInvestment + losingPoolShare;
+                position.yesShares = 0;
+                position.yesInvested = 0;
+                position.noShares = 0;
+                position.noInvested = 0;
+            } else if (market.outcome == 2 && position.noShares > 0) {
+                // NO won
+                require(market.totalNoShares > 0, "No winning shares");
+                userInvestment = position.noInvested;
+                
+                if (market.totalNoShares > 0 && market.yesPool > 0) {
+                    losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
+                }
+                
+                grossPayout = userInvestment + losingPoolShare;
+                position.noShares = 0;
+                position.noInvested = 0;
+                position.yesShares = 0;
+                position.yesInvested = 0;
+            } else if (market.outcome == 3) {
+                // INVALID - refund
+                uint256 totalShares = position.yesShares + position.noShares;
+                uint256 totalMarketShares = market.totalYesShares + market.totalNoShares;
+                if (totalShares > 0 && totalMarketShares > 0) {
+                    grossPayout = (market.totalPool * totalShares) / totalMarketShares;
+                }
+                position.yesShares = 0;
+                position.noShares = 0;
+                position.yesInvested = 0;
+                position.noInvested = 0;
+            } else {
+                // Loser - clear position
+                if (market.outcome == 1 && position.noShares > 0) {
+                    position.noShares = 0;
+                    position.noInvested = 0;
+                } else if (market.outcome == 2 && position.yesShares > 0) {
+                    position.yesShares = 0;
+                    position.yesInvested = 0;
+                }
+                continue; // Skip payout for losers
+            }
+            
+            if (grossPayout > 0) {
+                // Calculate platform fee (2% of gross payout)
+                uint256 platformFee = (grossPayout * platformFeePercent) / 10000;
+                uint256 netPayout = grossPayout - platformFee;
+                
+                totalPlatformFees += platformFee;
+                totalPayout += netPayout;
+                
+                // Transfer payout to winner
+                if (netPayout > 0) {
+                    require(address(this).balance >= netPayout, "Insufficient contract balance");
+                    payable(winner).transfer(netPayout);
+                }
+            }
+        }
+        
+        // Send all platform fees to fee recipient in one transfer
+        if (totalPlatformFees > 0 && feeRecipient != address(0)) {
+            require(address(this).balance >= totalPlatformFees, "Insufficient balance for platform fees");
+            payable(feeRecipient).transfer(totalPlatformFees);
+        }
+        
+        emit BatchPayoutCompleted(_marketId, _winners.length, totalPayout, totalPlatformFees);
+        
+        return (totalPayout, totalPlatformFees);
     }
 
     // Claim winnings after market resolution - PARI-MUTUEL MODEL
