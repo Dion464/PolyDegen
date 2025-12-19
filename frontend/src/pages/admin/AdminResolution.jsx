@@ -306,7 +306,7 @@ const AdminResolution = () => {
           if (totalYesShares > 0n && totalPool > 0n) {
             amountWon = (totalPool * yesShares / totalYesShares).toString();
           }
-          console.log(`✅ ${participant.userAddress} WON with ${shares} YES shares = ${(BigInt(amountWon) / BigInt(1e18)).toString()} ETH from pool`);
+          console.log(`✅ ${participant.userAddress} WON with ${shares} YES shares = ${(BigInt(amountWon) / BigInt(1e18)).toString()} TCENT from pool`);
         } else if (outcome === 2 && hasNoShares) {
           // NO won and user has NO shares - calculate pari-mutuel payout
           won = true;
@@ -316,7 +316,7 @@ const AdminResolution = () => {
           if (totalNoShares > 0n && totalPool > 0n) {
             amountWon = (totalPool * noShares / totalNoShares).toString();
           }
-          console.log(`✅ ${participant.userAddress} WON with ${shares} NO shares = ${(BigInt(amountWon) / BigInt(1e18)).toString()} ETH from pool`);
+          console.log(`✅ ${participant.userAddress} WON with ${shares} NO shares = ${(BigInt(amountWon) / BigInt(1e18)).toString()} TCENT from pool`);
         } else if (outcome === 1 && hasNoShares) {
           // YES won but user has NO shares - lost
           won = false;
@@ -333,9 +333,9 @@ const AdminResolution = () => {
           continue;
         }
 
-        // Format amount with proper decimals (convert from wei to ETH)
-        const amountWonETH = (BigInt(amountWon) / BigInt(1e18)).toString();
-        const formattedAmount = parseFloat(amountWonETH).toFixed(6);
+        // Format amount with proper decimals (convert from wei to TCENT)
+        const amountWonTCENT = (BigInt(amountWon) / BigInt(1e18)).toString();
+        const formattedAmount = parseFloat(amountWonTCENT).toFixed(6);
         const formattedShares = parseFloat(shares).toFixed(4);
         const formattedPool = (totalPool / BigInt(1e18)).toString();
 
@@ -346,7 +346,7 @@ const AdminResolution = () => {
             type: 'MARKET_RESOLVED',
             title: won ? `You Won! 🎉` : 'Market Resolved - You Lost',
             message: won
-              ? `Market "${market.question}" resolved to ${outcomeName}. You won ${formattedAmount} ETH from the total pool of ${formattedPool} ETH (${formattedShares} shares). Claim your winnings now!`
+              ? `Market "${market.question}" resolved to ${outcomeName}. You won ${formattedAmount} TCENT from the total pool of ${formattedPool} TCENT (${formattedShares} shares). Claim your winnings now!`
               : `Market "${market.question}" resolved to ${outcomeName}. Your ${formattedShares} shares lost.`,
             marketId: marketId.toString()
           };

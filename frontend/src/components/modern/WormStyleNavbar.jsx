@@ -169,13 +169,13 @@ const WormStyleNavbar = () => {
                 let shares = 0;
                 // Extract shares from message for MARKET_RESOLVED notifications
                 if (n.type === 'MARKET_RESOLVED' && n.message) {
-                  // Try to extract from new format: "You won X.XXXX ETH from the total pool... (Y.YYYY shares)"
-                  const newFormatMatch = n.message.match(/You won ([\d.]+) ETH.*?\(([\d.]+) shares\)/);
+                  // Try to extract from new format: "You won X.XXXX TCENT from the total pool... (Y.YYYY shares)"
+                  const newFormatMatch = n.message.match(/You won ([\d.]+) TCENT.*?\(([\d.]+) shares\)/);
                   if (newFormatMatch) {
                     shares = parseFloat(newFormatMatch[2]) || 0; // Extract shares from parentheses
                   } else {
                     // Fallback: try old format "You won X.XXXX TCENT"
-                    const amountMatch = n.message.match(/You won ([\d.]+) (TCENT|ETH)/);
+                    const amountMatch = n.message.match(/You won ([\d.]+) TCENT/);
                     if (amountMatch) {
                       shares = parseFloat(amountMatch[1]) || 0;
                     } else {
