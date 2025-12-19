@@ -225,73 +225,8 @@ const HomeWormStyle = () => {
   const { subscribeGlobal, onMessage } = useWebSocket();
   const liveMarkets = useLiveMarkets(5000); // 5s polling fallback
 
-  // Initial fetch on mount
-  useEffect(() => {
-    fetchMarkets();
-  }, [contracts]);
-  
-  // Subscribe to global market updates via WebSocket
-  useEffect(() => {
-    subscribeGlobal();
-    
-    // Listen for new market creation
-    const unsubscribe = onMessage('market_created', (data) => {
-      if (data.market) {
-        // Refresh markets list when new market is created
-        fetchMarkets();
-      }
-    });
-    
-    // Listen for market updates (resolution, etc.)
-    const unsubscribeUpdate = onMessage('market_update', (data) => {
-      if (data.market) {
-        // Update specific market in list
-        setMarkets(prev => {
-          const index = prev.findIndex(m => 
-            m.id === data.market.id || 
-            m.marketId === data.market.id ||
-            m.id === data.marketId
-          );
-          if (index >= 0) {
-            const updated = [...prev];
-            updated[index] = { ...updated[index], ...data.market };
-            return updated;
-          }
-          return prev;
-        });
-      }
-    });
-    
-    return () => {
-      unsubscribe();
-      unsubscribeUpdate();
-    };
-  }, [subscribeGlobal, onMessage, fetchMarkets]);
-  
-  // Update markets when live markets data changes (from WebSocket/polling)
-  useEffect(() => {
-    if (liveMarkets && liveMarkets.length > 0) {
-      // Merge with existing markets, prioritizing live data
-      setMarkets(prev => {
-        const merged = [...prev];
-        liveMarkets.forEach(liveMarket => {
-          const index = merged.findIndex(m => 
-            m.id === liveMarket.id || 
-            m.marketId === liveMarket.id ||
-            m.id === liveMarket.marketId
-          );
-          if (index >= 0) {
-            merged[index] = { ...merged[index], ...liveMarket };
-          } else {
-            merged.push(liveMarket);
-          }
-        });
-        return merged;
-      });
-    }
-  }, [liveMarkets]);
-
-  const fetchMarkets = async () => {
+  // Define fetchMarkets with useCallback BEFORE it's used in useEffect
+  const fetchMarkets = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -440,7 +375,73 @@ const HomeWormStyle = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [contracts, API_BASE]);
+
+  // Initial fetch on mount
+  useEffect(() => {
+    fetchMarkets();
+  }, [fetchMarkets]);
+  
+  // Subscribe to global market updates via WebSocket
+  useEffect(() => {
+    subscribeGlobal();
+    
+    // Listen for new market creation
+    const unsubscribe = onMessage('market_created', (data) => {
+      if (data.market) {
+        // Refresh markets list when new market is created
+        fetchMarkets();
+      }
+    });
+    
+    // Listen for market updates (resolution, etc.)
+    const unsubscribeUpdate = onMessage('market_update', (data) => {
+      if (data.market) {
+        // Update specific market in list
+        setMarkets(prev => {
+          const index = prev.findIndex(m => 
+            m.id === data.market.id || 
+            m.marketId === data.market.id ||
+            m.id === data.marketId
+          );
+          if (index >= 0) {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], ...data.market };
+            return updated;
+          }
+          return prev;
+        });
+      }
+    });
+    
+    return () => {
+      unsubscribe();
+      unsubscribeUpdate();
+    };
+  }, [subscribeGlobal, onMessage, fetchMarkets]);
+  
+  // Update markets when live markets data changes (from WebSocket/polling)
+  useEffect(() => {
+    if (liveMarkets && liveMarkets.length > 0) {
+      // Merge with existing markets, prioritizing live data
+      setMarkets(prev => {
+        const merged = [...prev];
+        liveMarkets.forEach(liveMarket => {
+          const index = merged.findIndex(m => 
+            m.id === liveMarket.id || 
+            m.marketId === liveMarket.id ||
+            m.id === liveMarket.marketId
+          );
+          if (index >= 0) {
+            merged[index] = { ...merged[index], ...liveMarket };
+          } else {
+            merged.push(liveMarket);
+          }
+        });
+        return merged;
+      });
+    }
+  }, [liveMarkets]);
 
   const handleSearch = (e) => {
     e.preventDefault();
