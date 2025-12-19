@@ -112,11 +112,8 @@ const PolymarketStyleTrading = () => {
   
   // WebSocket hooks for real-time updates
   const { subscribeMarket, onMessage } = useWebSocket();
-  const liveMarket = useLiveMarketData(marketId, getMarketData, 3000); // 3s polling fallback
-  const livePrices = useLivePrices(marketId, 2000); // 2s polling fallback
-  const liveTopHolders = useLiveTopHolders(marketId, 5000); // 5s polling fallback
   
-  // Get user position with real-time updates
+  // Get user position function - defined before useLivePosition hook
   const getUserPosition = useCallback(async (marketId, userAddress) => {
     if (!contracts?.predictionMarket || !userAddress) return null;
     try {
@@ -131,7 +128,11 @@ const PolymarketStyleTrading = () => {
     }
   }, [contracts?.predictionMarket]);
   
-  const livePosition = useLivePosition(marketId, account, getUserPosition, 3000);
+  // Use WebSocket hooks for real-time updates (only if getMarketData is available)
+  const liveMarket = useLiveMarketData(marketId, getMarketData || null, 3000); // 3s polling fallback
+  const livePrices = useLivePrices(marketId, 2000); // 2s polling fallback
+  const liveTopHolders = useLiveTopHolders(marketId, 5000); // 5s polling fallback
+  const livePosition = useLivePosition(marketId, account || null, getUserPosition, 3000);
   
   const resolveApiBase = () => {
     const envBase = import.meta.env.VITE_API_BASE_URL;
@@ -159,6 +160,7 @@ const PolymarketStyleTrading = () => {
   const [uniqueTraders, setUniqueTraders] = useState(0);
   const [liquidity, setLiquidity] = useState(0);
   const [timeframe, setTimeframe] = useState('all');
+  const isFetchingRef = useRef(false); // Prevent concurrent fetches
   const [customRules, setCustomRules] = useState([]);
   const fallbackContractRef = useRef(null);
   const [yesPriceHistory, setYesPriceHistory] = useState([]);
