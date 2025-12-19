@@ -17,6 +17,7 @@ import { getCurrencySymbol } from '../../utils/currency';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, RPC_URL, BLOCK_EXPLORER_URL } from '../../contracts/eth-config';
 import { ethers } from 'ethers';
 import './MarketDetailGlass.css'; // Import glassmorphism styles
+import { useWebSocket, useLiveMarketData, useLivePrices, useLiveTopHolders, useLivePosition } from '../../contexts/WebSocketContext';
 
 const SkeletonBlock = ({ className = '', style = {} }) => (
   <div
@@ -106,8 +107,32 @@ const PolymarketStyleTrading = () => {
     web3Context = { isConnected: false, contracts: {} };
   }
   
-  const { isConnected, contracts, getMarketData, chainId } = web3Context;
+  const { isConnected, contracts, getMarketData, chainId, account } = web3Context;
   const currencySymbol = getCurrencySymbol(chainId);
+  
+  // WebSocket hooks for real-time updates
+  const { subscribeMarket, onMessage } = useWebSocket();
+  const liveMarket = useLiveMarketData(marketId, getMarketData, 3000); // 3s polling fallback
+  const livePrices = useLivePrices(marketId, 2000); // 2s polling fallback
+  const liveTopHolders = useLiveTopHolders(marketId, 5000); // 5s polling fallback
+  
+  // Get user position with real-time updates
+  const getUserPosition = useCallback(async (marketId, userAddress) => {
+    if (!contracts?.predictionMarket || !userAddress) return null;
+    try {
+      const position = await contracts.predictionMarket.getUserPosition(marketId, userAddress);
+      return {
+        yesShares: position.yesShares?.toString() || '0',
+        noShares: position.noShares?.toString() || '0',
+        totalInvested: position.totalInvested?.toString() || '0'
+      };
+    } catch (err) {
+      return null;
+    }
+  }, [contracts?.predictionMarket]);
+  
+  const livePosition = useLivePosition(marketId, account, getUserPosition, 3000);
+  
   const resolveApiBase = () => {
     const envBase = import.meta.env.VITE_API_BASE_URL;
     // If explicitly provided, always honor it (dev often runs API on :8080 while Vite runs on :5173)
@@ -134,14 +159,27 @@ const PolymarketStyleTrading = () => {
   const [uniqueTraders, setUniqueTraders] = useState(0);
   const [liquidity, setLiquidity] = useState(0);
   const [timeframe, setTimeframe] = useState('all');
-  const refreshTriggerRef = useRef(0); // Force refresh counter
-  const isFetchingRef = useRef(false); // Prevent concurrent fetches
   const [customRules, setCustomRules] = useState([]);
   const fallbackContractRef = useRef(null);
   const [yesPriceHistory, setYesPriceHistory] = useState([]);
   const [noPriceHistory, setNoPriceHistory] = useState([]);
   const [priceHistory, setPriceHistory] = useState([]);
   const [trendingMarkets, setTrendingMarkets] = useState([]);
+  
+  // Update market state when live market data changes
+  useEffect(() => {
+    if (liveMarket) {
+      setMarket(liveMarket);
+      if (loading) setLoading(false);
+    }
+  }, [liveMarket, loading]);
+  
+  // Update top holders when live data changes
+  useEffect(() => {
+    if (liveTopHolders && liveTopHolders.length > 0) {
+      setTopHolders(liveTopHolders);
+    }
+  }, [liveTopHolders]);
 
   const safeToNumber = (value) => {
     if (value === null || value === undefined) return 0;
@@ -491,11 +529,15 @@ const PolymarketStyleTrading = () => {
     await fetchPriceHistoryFromDb(range);
   }, [fetchPriceHistoryFromDb]);
 
-  // Refresh function that can be called after trades
+  // Refresh function for after trades (triggered by WebSocket events)
   const refreshAllData = useCallback(async () => {
-    refreshTriggerRef.current += 1;
-    await fetchMarketData();
-  }, [fetchMarketData]);
+    // Only refresh price history and holders, market data comes from WebSocket
+    await Promise.all([
+      fetchPriceHistoryFromDb(timeframe),
+      fetchTopHolders(),
+      fetchOrderBook()
+    ]);
+  }, [fetchPriceHistoryFromDb, fetchTopHolders, fetchOrderBook, timeframe]);
 
   // Store fetchMarketData in a ref to avoid dependency issues
   const fetchMarketDataRef = useRef(fetchMarketData);
@@ -503,31 +545,43 @@ const PolymarketStyleTrading = () => {
     fetchMarketDataRef.current = fetchMarketData;
   }, [fetchMarketData]);
 
-  // Keep price history fresh without forcing a full market reload
+  // Real-time price history updates via WebSocket
   useEffect(() => {
-    if (!marketId || !API_BASE) return;
-
-    // 1s refresh for chart data (matches the "every second" requirement)
-    const priceInterval = setInterval(() => {
-      fetchPriceHistoryFromDb(timeframe);
-    }, 1000);
-
-    return () => clearInterval(priceInterval);
-  }, [marketId, API_BASE, timeframe, fetchPriceHistoryFromDb]);
-
+    if (!marketId) return;
+    
+    // Subscribe to market updates
+    subscribeMarket(marketId);
+    
+    // Listen for price updates and refresh chart
+    const unsubscribe = onMessage('price_update', (data) => {
+      if (data.marketId === marketId || data.marketId === String(marketId)) {
+        // Refresh price history when price updates
+        fetchPriceHistoryFromDb(timeframe);
+      }
+    });
+    
+    // Also listen for trade events
+    const unsubscribeTrade = onMessage('trade', (data) => {
+      if (data.marketId === marketId || data.marketId === String(marketId)) {
+        // Refresh price history and market data on trade
+        fetchPriceHistoryFromDb(timeframe);
+      }
+    });
+    
+    return () => {
+      unsubscribe();
+      unsubscribeTrade();
+    };
+  }, [marketId, timeframe, subscribeMarket, onMessage, fetchPriceHistoryFromDb]);
+  
+  // Initial data fetch only once on mount
   useEffect(() => {
     if (!marketId) return;
     
     // Reset fetching flag when marketId changes
     isFetchingRef.current = false;
     fetchMarketDataRef.current();
-    
-    const refreshInterval = setInterval(() => {
-        fetchMarketDataRef.current();
-    }, 60000); // 60 seconds
-    
-    return () => clearInterval(refreshInterval);
-  }, [marketId]); // Only depend on marketId to prevent infinite loops
+  }, [marketId]); // Only depend on marketId
 
   // Fetch trending markets
   useEffect(() => {
@@ -658,19 +712,7 @@ const PolymarketStyleTrading = () => {
     return () => clearInterval(priceRecordInterval);
   }, [isConnected, contracts?.predictionMarket, marketId, recordPriceSnapshot]);
 
-  // Periodic refresh of DB-backed data (price history) - events trigger immediate refresh
-  useEffect(() => {
-    if (!marketId || !isConnected || !contracts?.predictionMarket) {
-      return;
-    }
-
-    // Fallback: refresh every 5 minutes (events handle immediate updates)
-    const interval = setInterval(async () => {
-      await fetchPriceHistoryFromDb(timeframe);
-    }, 300000);
-
-    return () => clearInterval(interval);
-  }, [marketId, isConnected, contracts?.predictionMarket, timeframe]); // Remove fetchPriceHistoryFromDb to avoid loops
+  // Real-time updates handled by WebSocket hooks - no periodic refresh needed
 
   const getTimeAgo = (date) => {
     const now = new Date();

@@ -12,7 +12,7 @@ export const BLOCK_EXPLORER_URL = (import.meta.env.VITE_BLOCK_EXPLORER_URL || 'h
 export const CONTRACT_ABI = [
   // Market functions
   "function createMarket(string memory _question, string memory _description, string memory _category, uint256 _endTime, uint256 _resolutionTime) payable returns (uint256)",
-  "function getMarket(uint256 _marketId) view returns (tuple(uint256 id, string question, string description, string category, uint256 endTime, uint256 resolutionTime, bool resolved, uint8 outcome, uint256 totalYesShares, uint256 totalNoShares, uint256 totalVolume, address creator, uint256 createdAt, bool active, uint256 lastTradedPrice, uint256 yesBidPrice, uint256 yesAskPrice, uint256 noBidPrice, uint256 noAskPrice, uint256 totalPool))",
+  "function getMarket(uint256 _marketId) view returns (tuple(uint256 id, string question, string description, string category, uint256 endTime, uint256 resolutionTime, bool resolved, uint8 outcome, uint256 totalYesShares, uint256 totalNoShares, uint256 totalVolume, address creator, uint256 createdAt, bool active, uint256 lastTradedPrice, uint256 yesBidPrice, uint256 yesAskPrice, uint256 noBidPrice, uint256 noAskPrice, uint256 totalPool, uint256 yesPool, uint256 noPool))",
   "function getActiveMarkets() view returns (uint256[] memory)",
   "function getCurrentPrice(uint256 _marketId, bool _isYes) view returns (uint256)",
   "function getSharesAmount(uint256 _marketId, bool _isYes, uint256 _investAmount) view returns (uint256)",

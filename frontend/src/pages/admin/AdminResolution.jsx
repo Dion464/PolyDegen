@@ -269,9 +269,11 @@ const AdminResolution = () => {
         }
       }
 
-      // Get market data to access totalPool for pari-mutuel calculations
+      // Get market data to access pools for pari-mutuel calculations
       const marketData = await getMarketData(marketId);
       const totalPool = BigInt(marketData.totalPool || '0');
+      const yesPool = BigInt(marketData.yesPool || '0');
+      const noPool = BigInt(marketData.noPool || '0');
       const totalYesShares = BigInt(marketData.totalYesShares || '0');
       const totalNoShares = BigInt(marketData.totalNoShares || '0');
 
@@ -280,7 +282,8 @@ const AdminResolution = () => {
       let notificationsCreated = 0;
 
       console.log(`Creating notifications for ${participants.length} participants...`);
-      console.log(`Market total pool: ${totalPool.toString()}, YES shares: ${totalYesShares.toString()}, NO shares: ${totalNoShares.toString()}`);
+      console.log(`Market pools - Total: ${totalPool.toString()}, YES: ${yesPool.toString()}, NO: ${noPool.toString()}`);
+      console.log(`Market shares - YES: ${totalYesShares.toString()}, NO: ${totalNoShares.toString()}`);
 
       for (const participant of participants) {
         const yesShares = BigInt(participant.yesShares || '0');
@@ -293,30 +296,63 @@ const AdminResolution = () => {
           continue; // Skip if no shares
         }
 
+        // Get user's position to find their investment
+        let userYesInvested = BigInt(0);
+        let userNoInvested = BigInt(0);
+        try {
+          const position = await contracts.predictionMarket.getUserPosition(marketId, participant.userAddress);
+          // Note: getUserPosition returns (yesShares, noShares, totalInvested)
+          // We'll estimate investment based on shares proportion if yesInvested/noInvested not available
+          // For now, estimate: investment ≈ shares (1:1 ratio assumption)
+          userYesInvested = yesShares; // Estimate: 1 share = 1 TCENT invested
+          userNoInvested = noShares;   // Estimate: 1 share = 1 TCENT invested
+        } catch (err) {
+          console.warn(`Could not get position for ${participant.userAddress}, using estimates`);
+          userYesInvested = yesShares;
+          userNoInvested = noShares;
+        }
+
         let won = false;
         let shares = '0';
-        let amountWon = '0'; // Amount in wei (will be calculated from totalPool)
+        let grossPayout = '0'; // Investment + losing pool share (before fee)
+        let netPayout = '0';   // After 2% platform fee
         
         if (outcome === 1 && hasYesShares) {
-          // YES won and user has YES shares - calculate pari-mutuel payout
+          // YES won - user gets YES investment back + share of NO pool
           won = true;
           shares = (yesShares / BigInt(1e18)).toString();
           
-          // Pari-mutuel: payout = (totalPool * userShares) / totalWinningShares
-          if (totalYesShares > 0n && totalPool > 0n) {
-            amountWon = (totalPool * yesShares / totalYesShares).toString();
+          // Calculate: Investment + (NO pool * user YES shares / total YES shares)
+          const userInvestment = userYesInvested;
+          let losingPoolShare = BigInt(0);
+          if (totalYesShares > 0n && noPool > 0n) {
+            losingPoolShare = (noPool * yesShares) / totalYesShares;
           }
-          console.log(`✅ ${participant.userAddress} WON with ${shares} YES shares = ${(BigInt(amountWon) / BigInt(1e18)).toString()} TCENT from pool`);
+          grossPayout = (userInvestment + losingPoolShare).toString();
+          
+          // Apply 2% platform fee
+          const platformFee = (BigInt(grossPayout) * BigInt(200)) / BigInt(10000);
+          netPayout = (BigInt(grossPayout) - platformFee).toString();
+          
+          console.log(`✅ ${participant.userAddress} WON with ${shares} YES shares = ${(BigInt(netPayout) / BigInt(1e18)).toString()} TCENT (gross: ${(BigInt(grossPayout) / BigInt(1e18)).toString()}, fee: ${(platformFee / BigInt(1e18)).toString()})`);
         } else if (outcome === 2 && hasNoShares) {
-          // NO won and user has NO shares - calculate pari-mutuel payout
+          // NO won - user gets NO investment back + share of YES pool
           won = true;
           shares = (noShares / BigInt(1e18)).toString();
           
-          // Pari-mutuel: payout = (totalPool * userShares) / totalWinningShares
-          if (totalNoShares > 0n && totalPool > 0n) {
-            amountWon = (totalPool * noShares / totalNoShares).toString();
+          // Calculate: Investment + (YES pool * user NO shares / total NO shares)
+          const userInvestment = userNoInvested;
+          let losingPoolShare = BigInt(0);
+          if (totalNoShares > 0n && yesPool > 0n) {
+            losingPoolShare = (yesPool * noShares) / totalNoShares;
           }
-          console.log(`✅ ${participant.userAddress} WON with ${shares} NO shares = ${(BigInt(amountWon) / BigInt(1e18)).toString()} TCENT from pool`);
+          grossPayout = (userInvestment + losingPoolShare).toString();
+          
+          // Apply 2% platform fee
+          const platformFee = (BigInt(grossPayout) * BigInt(200)) / BigInt(10000);
+          netPayout = (BigInt(grossPayout) - platformFee).toString();
+          
+          console.log(`✅ ${participant.userAddress} WON with ${shares} NO shares = ${(BigInt(netPayout) / BigInt(1e18)).toString()} TCENT (gross: ${(BigInt(grossPayout) / BigInt(1e18)).toString()}, fee: ${(platformFee / BigInt(1e18)).toString()})`);
         } else if (outcome === 1 && hasNoShares) {
           // YES won but user has NO shares - lost
           won = false;
@@ -334,8 +370,8 @@ const AdminResolution = () => {
         }
 
         // Format amount with proper decimals (convert from wei to TCENT)
-        const amountWonTCENT = (BigInt(amountWon) / BigInt(1e18)).toString();
-        const formattedAmount = parseFloat(amountWonTCENT).toFixed(6);
+        const netPayoutTCENT = (BigInt(netPayout) / BigInt(1e18)).toString();
+        const formattedAmount = parseFloat(netPayoutTCENT).toFixed(6);
         const formattedShares = parseFloat(shares).toFixed(4);
         const formattedPool = (totalPool / BigInt(1e18)).toString();
 
@@ -346,7 +382,7 @@ const AdminResolution = () => {
             type: 'MARKET_RESOLVED',
             title: won ? `You Won! 🎉` : 'Market Resolved - You Lost',
             message: won
-              ? `Market "${market.question}" resolved to ${outcomeName}. You won ${formattedAmount} TCENT from the total pool of ${formattedPool} TCENT (${formattedShares} shares). Claim your winnings now!`
+              ? `Market "${market.question}" resolved to ${outcomeName}. You won ${formattedAmount} TCENT (${formattedShares} shares, after 2% platform fee). Claim your winnings now!`
               : `Market "${market.question}" resolved to ${outcomeName}. Your ${formattedShares} shares lost.`,
             marketId: marketId.toString()
           };

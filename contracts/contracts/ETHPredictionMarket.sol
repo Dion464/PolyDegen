@@ -30,12 +30,16 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         uint256 noAskPrice;  // Best ask for NO in basis points
         // Pari-mutuel pool tracking
         uint256 totalPool; // Total ETH pooled from all purchases (for pari-mutuel payouts)
+        uint256 yesPool; // Total ETH invested in YES side (after platform fees)
+        uint256 noPool;  // Total ETH invested in NO side (after platform fees)
     }
 
     struct Position {
         uint256 yesShares;
         uint256 noShares;
         uint256 totalInvested;
+        uint256 yesInvested; // Investment in YES side
+        uint256 noInvested;  // Investment in NO side
     }
 
     struct Trade {
@@ -75,6 +79,7 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
     uint256 public nextMarketId;
     uint256 public marketCreationFee; // Fee to create market
     uint256 public platformFeePercent; // Platform fee in basis points
+    address public feeRecipient; // Address to receive platform fees
     
     mapping(uint256 => Market) public markets;
     mapping(uint256 => mapping(address => Position)) public positions;
@@ -190,10 +195,12 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         address indexed finalizer
     );
 
-    constructor(uint256 _marketCreationFee, uint256 _platformFeePercent) {
+    constructor(uint256 _marketCreationFee, uint256 _platformFeePercent, address _feeRecipient) {
         nextMarketId = 1;
         marketCreationFee = _marketCreationFee;
         platformFeePercent = _platformFeePercent;
+        feeRecipient = _feeRecipient;
+        require(_feeRecipient != address(0), "Fee recipient cannot be zero address");
         
         // Deploy and initialize the pricing AMM with a unique salt
         // Use block.timestamp to ensure unique deployment
@@ -238,7 +245,9 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             noBidPrice: 0, // No initial bids
             noAskPrice: 10000, // No initial asks
             // Pari-mutuel pool starts at 0
-            totalPool: 0
+            totalPool: 0,
+            yesPool: 0,
+            noPool: 0
         });
 
         activeMarketIds.push(marketId);
@@ -321,13 +330,21 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         market.totalVolume += msg.value;
         // Track actual ETH deposited for pari-mutuel payouts (investment amount minus platform fee)
         market.totalPool += investmentAmount;
+        // Track pool per side
+        if (_isYes) {
+            market.yesPool += investmentAmount;
+        } else {
+            market.noPool += investmentAmount;
+        }
 
         // Update user position
         Position storage position = positions[_marketId][msg.sender];
         if (_isYes) {
             position.yesShares += shares;
+            position.yesInvested += investmentAmount; // Track investment in YES side (after fee)
         } else {
             position.noShares += shares;
+            position.noInvested += investmentAmount; // Track investment in NO side (after fee)
         }
         position.totalInvested += msg.value;
 
@@ -935,8 +952,7 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
     }
 
     // Claim winnings after market resolution - PARI-MUTUEL MODEL
-    // Winners split the TOTAL POOL (all funds from both sides)
-    // Payout per winning share = totalPool / totalWinningShares
+    // Winners get: Their investment back + Share of losing side's pool - 2% platform fee
     function claimWinnings(uint256 _marketId) external nonReentrant {
         Market storage market = markets[_marketId];
         require(market.resolved, "Market not resolved");
@@ -944,50 +960,87 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         Position storage position = positions[_marketId][msg.sender];
         require(position.yesShares > 0 || position.noShares > 0, "No position in market");
 
-        uint256 payout = 0;
+        uint256 grossPayout = 0;
+        uint256 userInvestment = 0;
+        uint256 losingPoolShare = 0;
         
         if (market.outcome == 1 && position.yesShares > 0) {
-            // YES won - winners split the entire pool proportionally
-            // Each winning share gets: totalPool / totalYesShares
+            // YES won - user gets YES investment back + share of NO pool
             require(market.totalYesShares > 0, "No winning shares");
-            payout = (market.totalPool * position.yesShares) / market.totalYesShares;
+            userInvestment = position.yesInvested; // Refund their YES investment
+            
+            // Calculate share of NO pool (losing side)
+            if (market.totalYesShares > 0 && market.noPool > 0) {
+                losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
+            }
+            
+            grossPayout = userInvestment + losingPoolShare;
             position.yesShares = 0;
+            position.yesInvested = 0;
             // Also clear any NO shares (they lost)
             position.noShares = 0;
+            position.noInvested = 0;
         } else if (market.outcome == 2 && position.noShares > 0) {
-            // NO won - winners split the entire pool proportionally
-            // Each winning share gets: totalPool / totalNoShares
+            // NO won - user gets NO investment back + share of YES pool
             require(market.totalNoShares > 0, "No winning shares");
-            payout = (market.totalPool * position.noShares) / market.totalNoShares;
+            userInvestment = position.noInvested; // Refund their NO investment
+            
+            // Calculate share of YES pool (losing side)
+            if (market.totalNoShares > 0 && market.yesPool > 0) {
+                losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
+            }
+            
+            grossPayout = userInvestment + losingPoolShare;
             position.noShares = 0;
+            position.noInvested = 0;
             // Also clear any YES shares (they lost)
             position.yesShares = 0;
+            position.yesInvested = 0;
         } else if (market.outcome == 3) {
             // INVALID - refund proportionally based on total invested
             uint256 totalShares = position.yesShares + position.noShares;
             uint256 totalMarketShares = market.totalYesShares + market.totalNoShares;
             if (totalShares > 0 && totalMarketShares > 0) {
                 // Refund based on share proportion of total pool
-                payout = (market.totalPool * totalShares) / totalMarketShares;
+                grossPayout = (market.totalPool * totalShares) / totalMarketShares;
             }
             position.yesShares = 0;
             position.noShares = 0;
+            position.yesInvested = 0;
+            position.noInvested = 0;
         } else {
             // User only has losing shares - no payout
             // Clear losing shares
             if (market.outcome == 1 && position.noShares > 0) {
-                position.noShares = 0; // NO shares lost - their stake goes to YES winners
+                position.noShares = 0;
+                position.noInvested = 0; // NO shares lost - forfeited
             } else if (market.outcome == 2 && position.yesShares > 0) {
-                position.yesShares = 0; // YES shares lost - their stake goes to NO winners
+                position.yesShares = 0;
+                position.yesInvested = 0; // YES shares lost - forfeited
             }
             // Payout remains 0 for losers
         }
 
-        // Only require payout > 0 if user won (has winnings to claim)
-        // If user lost, payout is 0 but we still clear their position
-        if (payout > 0) {
-            require(address(this).balance >= payout, "Insufficient contract balance");
-            payable(msg.sender).transfer(payout);
+        // Calculate platform fee (2% of gross payout)
+        uint256 platformFee = 0;
+        uint256 netPayout = 0;
+        
+        if (grossPayout > 0) {
+            // Platform fee = 2% of gross payout
+            platformFee = (grossPayout * platformFeePercent) / 10000;
+            netPayout = grossPayout - platformFee;
+            
+            // Send platform fee to fee recipient
+            if (platformFee > 0 && feeRecipient != address(0)) {
+                require(address(this).balance >= platformFee, "Insufficient balance for platform fee");
+                payable(feeRecipient).transfer(platformFee);
+            }
+            
+            // Pay user their net payout
+            if (netPayout > 0) {
+                require(address(this).balance >= netPayout, "Insufficient contract balance");
+                payable(msg.sender).transfer(netPayout);
+            }
         } else {
             // User lost - position is already cleared, but no payout
             // Allow this so users can "claim" to clear their losing position from the UI
@@ -1297,6 +1350,11 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
     function setPlatformFeePercent(uint256 _feePercent) external onlyOwner {
         require(_feePercent <= 1000, "Fee too high"); // Max 10%
         platformFeePercent = _feePercent;
+    }
+
+    function setFeeRecipient(address _feeRecipient) external onlyOwner {
+        require(_feeRecipient != address(0), "Fee recipient cannot be zero address");
+        feeRecipient = _feeRecipient;
     }
 
     function withdrawFees() external onlyOwner {

@@ -320,8 +320,8 @@ export function useLiveActivity(marketId = null, pollInterval = 15000) {
 }
 
 // Hook for market updates (resolution, etc.)
-export function useLiveMarketUpdates(marketId, pollInterval = 30000) {
-  const [update, setUpdate] = useState(null);
+export function useLiveMarketUpdates(marketId, pollInterval = 5000) {
+  const [market, setMarket] = useState(null);
   const { isConnected, usePolling, subscribeMarket, onMessage, apiUrl } = useWebSocket();
 
   // WebSocket mode
@@ -332,26 +332,31 @@ export function useLiveMarketUpdates(marketId, pollInterval = 30000) {
     
     return onMessage('market_update', (data) => {
       if (data.marketId === marketId || data.marketId === String(marketId)) {
-        setUpdate(data);
+        if (data.market) {
+          setMarket(data.market);
+        } else {
+          setMarket(prev => ({ ...prev, ...data }));
+        }
       }
     });
   }, [isConnected, marketId, usePolling, subscribeMarket, onMessage]);
 
-  // Polling mode - check market status
+  // Polling mode - fetch full market data
   useEffect(() => {
     if (!usePolling || !marketId) return;
 
-    const checkMarket = async () => {
+    const fetchMarket = async () => {
       try {
         const response = await fetch(`${apiUrl}/api/markets?marketId=${marketId}`);
         if (response.ok) {
           const data = await response.json();
-          if (data.market?.resolved) {
-            setUpdate({
-              type: 'market_update',
-              marketId,
-              status: 'resolved',
-              outcome: data.market.outcome
+          if (data.market) {
+            setMarket(prev => {
+              // Only update if data actually changed
+              if (!prev || JSON.stringify(prev) !== JSON.stringify(data.market)) {
+                return data.market;
+              }
+              return prev;
             });
           }
         }
@@ -360,12 +365,244 @@ export function useLiveMarketUpdates(marketId, pollInterval = 30000) {
       }
     };
 
-    const interval = setInterval(checkMarket, pollInterval);
+    fetchMarket();
+    const interval = setInterval(fetchMarket, pollInterval);
     
     return () => clearInterval(interval);
   }, [usePolling, marketId, apiUrl, pollInterval]);
 
-  return update;
+  return market;
+}
+
+// Hook for real-time market data (full market object)
+export function useLiveMarketData(marketId, getMarketDataFn, pollInterval = 3000) {
+  const [market, setMarket] = useState(null);
+  const { isConnected, usePolling, subscribeMarket, onMessage } = useWebSocket();
+  const lastUpdateRef = useRef(null);
+
+  // WebSocket mode
+  useEffect(() => {
+    if (!isConnected || !marketId || usePolling || !getMarketDataFn) return;
+
+    subscribeMarket(marketId);
+    
+    const handleUpdate = async (data) => {
+      if (data.marketId === marketId || data.marketId === String(marketId)) {
+        // Fetch fresh market data when update received
+        try {
+          const freshMarket = await getMarketDataFn(marketId);
+          if (freshMarket) {
+            setMarket(freshMarket);
+            lastUpdateRef.current = Date.now();
+          }
+        } catch (err) {
+          console.error('Failed to fetch market data on update:', err);
+        }
+      }
+    };
+
+    return onMessage('market_update', handleUpdate);
+  }, [isConnected, marketId, usePolling, subscribeMarket, onMessage, getMarketDataFn]);
+
+  // Polling mode - fetch market data
+  useEffect(() => {
+    if (!usePolling || !marketId || !getMarketDataFn) return;
+
+    const fetchMarket = async () => {
+      try {
+        const freshMarket = await getMarketDataFn(marketId);
+        if (freshMarket) {
+          setMarket(prev => {
+            // Only update if data changed
+            if (!prev || JSON.stringify(prev) !== JSON.stringify(freshMarket)) {
+              return freshMarket;
+            }
+            return prev;
+          });
+        }
+      } catch (error) {
+        // Silent fail
+      }
+    };
+
+    fetchMarket();
+    const interval = setInterval(fetchMarket, pollInterval);
+    
+    return () => clearInterval(interval);
+  }, [usePolling, marketId, getMarketDataFn, pollInterval]);
+
+  return market;
+}
+
+// Hook for real-time position updates
+export function useLivePosition(marketId, userAddress, getPositionFn, pollInterval = 3000) {
+  const [position, setPosition] = useState(null);
+  const { isConnected, usePolling, subscribeMarket, onMessage } = useWebSocket();
+
+  // WebSocket mode
+  useEffect(() => {
+    if (!isConnected || !marketId || !userAddress || usePolling || !getPositionFn) return;
+
+    subscribeMarket(marketId);
+    
+    const handleUpdate = async (data) => {
+      if ((data.marketId === marketId || data.marketId === String(marketId)) && 
+          (data.userAddress?.toLowerCase() === userAddress.toLowerCase() || !data.userAddress)) {
+        try {
+          const freshPosition = await getPositionFn(marketId, userAddress);
+          if (freshPosition) {
+            setPosition(freshPosition);
+          }
+        } catch (err) {
+          console.error('Failed to fetch position on update:', err);
+        }
+      }
+    };
+
+    return onMessage('position_update', handleUpdate);
+  }, [isConnected, marketId, userAddress, usePolling, subscribeMarket, onMessage, getPositionFn]);
+
+  // Polling mode
+  useEffect(() => {
+    if (!usePolling || !marketId || !userAddress || !getPositionFn) return;
+
+    const fetchPosition = async () => {
+      try {
+        const freshPosition = await getPositionFn(marketId, userAddress);
+        if (freshPosition) {
+          setPosition(prev => {
+            if (!prev || JSON.stringify(prev) !== JSON.stringify(freshPosition)) {
+              return freshPosition;
+            }
+            return prev;
+          });
+        }
+      } catch (error) {
+        // Silent fail
+      }
+    };
+
+    fetchPosition();
+    const interval = setInterval(fetchPosition, pollInterval);
+    
+    return () => clearInterval(interval);
+  }, [usePolling, marketId, userAddress, getPositionFn, pollInterval]);
+
+  return position;
+}
+
+// Hook for real-time top holders updates
+export function useLiveTopHolders(marketId, pollInterval = 5000) {
+  const [topHolders, setTopHolders] = useState([]);
+  const { isConnected, usePolling, subscribeMarket, onMessage, apiUrl } = useWebSocket();
+
+  // WebSocket mode
+  useEffect(() => {
+    if (!isConnected || !marketId || usePolling) return;
+
+    subscribeMarket(marketId);
+    
+    return onMessage('holders_update', (data) => {
+      if (data.marketId === marketId || data.marketId === String(marketId)) {
+        if (data.holders) {
+          setTopHolders(data.holders);
+        }
+      }
+    });
+  }, [isConnected, marketId, usePolling, subscribeMarket, onMessage]);
+
+  // Polling mode
+  useEffect(() => {
+    if (!usePolling || !marketId) return;
+
+    const fetchHolders = async () => {
+      try {
+        const response = await fetch(`${apiUrl}/api/markets/${marketId}/top-holders`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.holders) {
+            setTopHolders(prev => {
+              if (JSON.stringify(prev) !== JSON.stringify(data.holders)) {
+                return data.holders;
+              }
+              return prev;
+            });
+          }
+        }
+      } catch (error) {
+        // Silent fail
+      }
+    };
+
+    fetchHolders();
+    const interval = setInterval(fetchHolders, pollInterval);
+    
+    return () => clearInterval(interval);
+  }, [usePolling, marketId, apiUrl, pollInterval]);
+
+  return topHolders;
+}
+
+// Hook for real-time markets list updates
+export function useLiveMarkets(pollInterval = 5000) {
+  const [markets, setMarkets] = useState([]);
+  const { isConnected, usePolling, subscribeGlobal, onMessage, apiUrl } = useWebSocket();
+
+  // WebSocket mode
+  useEffect(() => {
+    if (!isConnected || usePolling) return;
+
+    subscribeGlobal();
+    
+    return onMessage('markets_update', (data) => {
+      if (data.markets) {
+        setMarkets(data.markets);
+      } else if (data.market) {
+        // Single market update - update in list
+        setMarkets(prev => {
+          const index = prev.findIndex(m => m.id === data.market.id || m.marketId === data.market.id);
+          if (index >= 0) {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], ...data.market };
+            return updated;
+          }
+          return prev;
+        });
+      }
+    });
+  }, [isConnected, usePolling, subscribeGlobal, onMessage]);
+
+  // Polling mode
+  useEffect(() => {
+    if (!usePolling) return;
+
+    const fetchMarkets = async () => {
+      try {
+        const response = await fetch(`${apiUrl}/api/markets?limit=100`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.markets) {
+            setMarkets(prev => {
+              // Only update if data changed
+              if (JSON.stringify(prev) !== JSON.stringify(data.markets)) {
+                return data.markets;
+              }
+              return prev;
+            });
+          }
+        }
+      } catch (error) {
+        // Silent fail
+      }
+    };
+
+    fetchMarkets();
+    const interval = setInterval(fetchMarkets, pollInterval);
+    
+    return () => clearInterval(interval);
+  }, [usePolling, apiUrl, pollInterval]);
+
+  return markets;
 }
 
 export default WebSocketContext;

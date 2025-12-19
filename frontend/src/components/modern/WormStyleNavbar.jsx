@@ -167,27 +167,33 @@ const WormStyleNavbar = () => {
               .filter(n => !n.read)
               .map((n) => {
                 let shares = 0;
-                // Extract shares from message for MARKET_RESOLVED notifications
+                let payoutAmount = 0; // Actual payout amount in TCENT
+                
+                // Extract shares and payout amount from message for MARKET_RESOLVED notifications
                 if (n.type === 'MARKET_RESOLVED' && n.message) {
                   // Try to extract from new format: "You won X.XXXX TCENT from the total pool... (Y.YYYY shares)"
                   const newFormatMatch = n.message.match(/You won ([\d.]+) TCENT.*?\(([\d.]+) shares\)/);
                   if (newFormatMatch) {
-                    shares = parseFloat(newFormatMatch[2]) || 0; // Extract shares from parentheses
+                    payoutAmount = parseFloat(newFormatMatch[1]) || 0; // Extract payout amount (first match)
+                    shares = parseFloat(newFormatMatch[2]) || 0; // Extract shares from parentheses (second match)
                   } else {
                     // Fallback: try old format "You won X.XXXX TCENT"
                     const amountMatch = n.message.match(/You won ([\d.]+) TCENT/);
                     if (amountMatch) {
-                      shares = parseFloat(amountMatch[1]) || 0;
+                      payoutAmount = parseFloat(amountMatch[1]) || 0;
+                      shares = payoutAmount; // In old format, amount = shares
                     } else {
                       // Fallback: try to extract from "(X.XXXX shares × 1 TCENT per share)" format (old format)
                       const sharesMatch = n.message.match(/\(([\d.]+) shares/);
                       if (sharesMatch) {
                         shares = parseFloat(sharesMatch[1]) || 0;
+                        payoutAmount = shares; // Old format: 1 TCENT per share
                       } else {
                         // Last fallback: try "have X winning shares" format
                         const fallbackMatch = n.message.match(/have ([\d.]+) winning shares/);
                         if (fallbackMatch) {
                           shares = parseFloat(fallbackMatch[1]) || 0;
+                          payoutAmount = shares; // Assume 1 TCENT per share for old format
                         }
                       }
                     }
@@ -204,6 +210,7 @@ const WormStyleNavbar = () => {
                   claimable: n.type === 'MARKET_RESOLVED' && n.message.includes('won') && !n.claimed,
                   claimed: n.claimed || false,
                   shares: shares,
+                  payoutAmount: payoutAmount, // Store actual payout amount
                   marketId: n.marketId ? Number(n.marketId) : null,
                   pendingMarketId: n.pendingMarketId ? Number(n.pendingMarketId) : null,
                   updatedAt: new Date(n.createdAt).getTime()
@@ -554,7 +561,7 @@ const WormStyleNavbar = () => {
                                   disabled={claimingMarket === notif.marketId}
                                   className="w-full text-sm sm:text-xs font-semibold text-black bg-[#FFE600] hover:bg-[#FFD700] active:bg-[#FFC700] rounded-full py-2.5 sm:py-2 touch-manipulation transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
-                                  {claimingMarket === notif.marketId ? 'Claiming...' : `Claim ${((notif.shares || 0) > 0 ? notif.shares.toFixed(2) : '0.00')} TCENT`}
+                                  {claimingMarket === notif.marketId ? 'Claiming...' : `Claim ${((notif.payoutAmount || notif.shares || 0) > 0 ? (notif.payoutAmount || notif.shares).toFixed(2) : '0.00')} TCENT`}
                                 </button>
                               )
                             )}

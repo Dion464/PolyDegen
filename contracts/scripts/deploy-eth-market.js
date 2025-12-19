@@ -11,15 +11,17 @@ async function main() {
     console.log("\n📊 Deploying ETH Prediction Market...");
     const ETHPredictionMarket = await ethers.getContractFactory("ETHPredictionMarket");
     
-    // Constructor arguments: marketCreationFee, platformFeePercent
+    // Constructor arguments: marketCreationFee, platformFeePercent, feeRecipient
     const marketCreationFeeArg = ethers.utils.parseEther("0.01"); // 0.01 TCENT
     const platformFeePercentArg = 200; // 2% in basis points (200 = 2%)
+    const feeRecipientArg = process.env.VITE_SUBMISSION_FEE_RECIPIENT || "0xDe33759b16D40e49ab825B1faecac7bEBD62267D";
     
     console.log("Constructor arguments:");
     console.log("  Market Creation Fee:", ethers.utils.formatEther(marketCreationFeeArg), "TCENT");
     console.log("  Platform Fee:", platformFeePercentArg, "basis points (2%)");
+    console.log("  Fee Recipient:", feeRecipientArg);
     
-    const ethPredictionMarket = await ETHPredictionMarket.deploy(marketCreationFeeArg, platformFeePercentArg);
+    const ethPredictionMarket = await ETHPredictionMarket.deploy(marketCreationFeeArg, platformFeePercentArg, feeRecipientArg);
     await ethPredictionMarket.deployed();
 
     console.log("✅ ETH Prediction Market deployed to:", ethPredictionMarket.address);
