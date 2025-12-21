@@ -168,13 +168,61 @@ const PolymarketStyleTrading = () => {
   const [priceHistory, setPriceHistory] = useState([]);
   const [trendingMarkets, setTrendingMarkets] = useState([]);
   
-  // Update market state when live market data changes
+  // Update market state when live market data changes - preserve image and title
   useEffect(() => {
     if (liveMarket) {
-      setMarket(liveMarket);
+      setMarket(prev => {
+        // Merge with existing market to preserve imageUrl, questionTitle, and other UI-specific fields
+        if (prev) {
+          const merged = {
+            ...prev,
+            ...liveMarket,
+            // Preserve these fields if they exist in previous state
+            imageUrl: liveMarket.imageUrl || prev.imageUrl,
+            questionTitle: liveMarket.questionTitle || liveMarket.question || prev.questionTitle,
+            question: liveMarket.question || prev.question,
+            // Preserve other UI fields
+            description: liveMarket.description || prev.description,
+            category: liveMarket.category || prev.category,
+          };
+          
+          // If imageUrl is missing, fetch it
+          if (!merged.imageUrl && merged.id) {
+            fetch(`${API_BASE}/api/market-images?marketId=${merged.id}`)
+              .then(res => res.ok ? res.json() : null)
+              .then(data => {
+                if (data?.imageUrl) {
+                  setMarket(prevMarket => prevMarket ? { ...prevMarket, imageUrl: data.imageUrl } : prevMarket);
+                }
+              })
+              .catch(() => {}); // Silent fail
+          }
+          
+          return merged;
+        }
+        // If no previous market, use liveMarket but ensure questionTitle is set
+        const newMarket = {
+          ...liveMarket,
+          questionTitle: liveMarket.questionTitle || liveMarket.question,
+        };
+        
+        // Fetch image if missing
+        if (!newMarket.imageUrl && newMarket.id) {
+          fetch(`${API_BASE}/api/market-images?marketId=${newMarket.id}`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+              if (data?.imageUrl) {
+                setMarket(prevMarket => prevMarket ? { ...prevMarket, imageUrl: data.imageUrl } : prevMarket);
+              }
+            })
+            .catch(() => {}); // Silent fail
+        }
+        
+        return newMarket;
+      });
       if (loading) setLoading(false);
     }
-  }, [liveMarket, loading]);
+  }, [liveMarket, loading, API_BASE]);
   
   // Update top holders when live data changes
   useEffect(() => {
@@ -493,6 +541,7 @@ const PolymarketStyleTrading = () => {
         currentProbability: Number(marketData.yesPrice ?? 50) / 100
       };
 
+      // Fetch image from API
       try {
         const imageResponse = await fetch(`${API_BASE}/api/market-images?marketId=${processedMarket.id}`);
         if (imageResponse.ok) {
@@ -503,6 +552,11 @@ const PolymarketStyleTrading = () => {
         }
       } catch (imageErr) {
         console.warn('Unable to load market image from API:', imageErr);
+      }
+      
+      // Ensure questionTitle is set (use question if questionTitle not available)
+      if (!processedMarket.questionTitle && processedMarket.question) {
+        processedMarket.questionTitle = processedMarket.question;
       }
 
       setMarket(processedMarket);
@@ -533,13 +587,45 @@ const PolymarketStyleTrading = () => {
 
   // Refresh function for after trades (triggered by WebSocket events)
   const refreshAllData = useCallback(async () => {
-    // Only refresh price history and holders, market data comes from WebSocket
+    // Refresh price history, holders, and order book
+    // But preserve market image and title - don't refetch full market data
     await Promise.all([
       fetchPriceHistoryFromDb(timeframe),
       fetchTopHolders(),
       fetchOrderBook()
     ]);
-  }, [fetchPriceHistoryFromDb, fetchTopHolders, fetchOrderBook, timeframe]);
+    
+    // Only update market prices/shares from contract, preserve image and title
+    if (contracts?.predictionMarket && marketId && market) {
+      try {
+        const [yesPrice, noPrice, marketData] = await Promise.all([
+          contracts.predictionMarket.getCurrentPrice(marketId, true),
+          contracts.predictionMarket.getCurrentPrice(marketId, false),
+          contracts.predictionMarket.getMarket(marketId)
+        ]);
+        
+        // Update only price and volume data, preserve imageUrl and questionTitle
+        setMarket(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            yesPrice: Math.round(parseFloat(yesPrice.toString()) / 100),
+            noPrice: Math.round(parseFloat(noPrice.toString()) / 100),
+            totalVolume: parseFloat(ethers.utils.formatEther(marketData.totalYesShares || '0')) + 
+                        parseFloat(ethers.utils.formatEther(marketData.totalNoShares || '0')),
+            // Preserve these fields
+            imageUrl: prev.imageUrl,
+            questionTitle: prev.questionTitle,
+            question: prev.question || prev.questionTitle,
+            description: prev.description,
+            category: prev.category,
+          };
+        });
+      } catch (err) {
+        console.warn('Failed to update market prices after trade:', err);
+      }
+    }
+  }, [fetchPriceHistoryFromDb, fetchTopHolders, fetchOrderBook, timeframe, contracts?.predictionMarket, marketId, market]);
 
   // Store fetchMarketData in a ref to avoid dependency issues
   const fetchMarketDataRef = useRef(fetchMarketData);
