@@ -180,14 +180,16 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
   // Calculate potential payout
   const potentialPayout = buyAmountNum > 0 && currentPrice ? (buyAmountNum / (currentPrice / 100)).toFixed(2) : '0.00';
   
-  const handleCardClick = (e) => {
-    // Don't navigate if clicking on buy buttons or flip card elements
-    if (e.target.closest('.buy-button') || e.target.closest('.flip-card-inner') || isFlipped) return;
-    history.push(`/markets/${market.id}`);
+  const handleNavigateToMarket = () => {
+    if (!isFlipped) {
+      history.push(`/markets/${market.id}`);
+    }
   };
 
   const handleBuy = (side, e) => {
     e.stopPropagation();
+    e.preventDefault();
+    e.nativeEvent.stopImmediatePropagation();
     if (!isConnected) {
       toast.error('Please connect your wallet');
       return;
@@ -311,13 +313,14 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
 
   return (
     <div 
-      onClick={handleCardClick}
-      className="glass-card box-shadow transition-all duration-300"
+      className="transition-all duration-300"
       style={{
         width: '100%',
-        minHeight: '235px',
+        height: '260px',
         perspective: '1000px',
-        cursor: isFlipped ? 'default' : 'pointer'
+        cursor: isFlipped ? 'default' : 'pointer',
+        border: 'none',
+        outline: 'none'
       }}
     >
       <div
@@ -336,17 +339,20 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
           style={{
             position: 'relative',
             width: '100%',
-            minHeight: '235px',
+            height: '100%',
             backfaceVisibility: 'hidden',
             WebkitBackfaceVisibility: 'hidden',
             background: 'linear-gradient(135deg, rgba(18,18,18,0.68), rgba(40,40,40,0.52))',
             backdropFilter: 'blur(24px)',
             WebkitBackdropFilter: 'blur(24px)',
             borderRadius: '14px',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            boxShadow: '0 0 0 1px rgba(255, 255, 255, 0.06), 0 18px 45px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.14)',
+            border: isFlipped ? 'none' : '1px solid rgba(255, 255, 255, 0.2)',
+            boxShadow: isFlipped 
+              ? '0 18px 45px rgba(0, 0, 0, 0.5)' 
+              : '0 0 0 1px rgba(255, 255, 255, 0.06), 0 18px 45px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.14)',
             overflow: 'hidden',
-            transform: 'rotateY(0deg)'
+            transform: 'rotateY(0deg)',
+            outline: 'none'
           }}
           className={!isFlipped ? 'hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(247,208,34,0.15)]' : ''}
         >
@@ -356,6 +362,7 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', marginBottom: '20px' }}>
           {/* Market Icon */}
           <div 
+            onClick={handleNavigateToMarket}
             style={{
               width: '48px',
               height: '54px',
@@ -366,7 +373,8 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
               flexShrink: 0,
               background: '#1a1a1a',
               border: '1px solid rgba(255, 255, 255, 0.1)',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+              cursor: 'pointer'
             }}
           >
             <LazyImage
@@ -378,12 +386,15 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
           </div>
           
           {/* Title */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div 
+            onClick={handleNavigateToMarket}
+            style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+          >
             <h3 
               style={{
                 fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                 fontWeight: 600, 
-                fontSize: '19px',
+                fontSize: '16.5rpx',
                 lineHeight: '26px',
                 color: '#F2F2F2',
                 margin: 0
@@ -499,10 +510,15 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
         </div>
         
         {/* Bottom Section: Yes/No Buttons */}
-        <div style={{ display: 'flex', gap: '10px', marginTop: 'auto' }}>
+        <div 
+          data-buy-buttons
+          onClick={(e) => e.stopPropagation()}
+          style={{ display: 'flex', gap: '10px', marginTop: 'auto' }}
+        >
           {/* Yes Button */}
           <button
             className="buy-button"
+            type="button"
             onClick={(e) => handleBuy('yes', e)}
             style={{
               flex: 1,
@@ -546,6 +562,7 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
           {/* No Button */}
           <button
             className="buy-button"
+            type="button"
             onClick={(e) => handleBuy('no', e)}
             style={{
               flex: 1,
@@ -594,32 +611,35 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
         style={{
           position: 'absolute',
           width: '100%',
-          minHeight: '235px',
+          height: '100%',
           top: 0,
           left: 0,
+          right: 0,
+          bottom: 0,
           backfaceVisibility: 'hidden',
           WebkitBackfaceVisibility: 'hidden',
           background: 'linear-gradient(135deg, rgba(18,18,18,0.68), rgba(40,40,40,0.52))',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
           borderRadius: '14px',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          boxShadow: '0 0 0 1px rgba(255, 255, 255, 0.06), 0 18px 45px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.14)',
+          border: 'none',
+          boxShadow: '0 18px 45px rgba(0, 0, 0, 0.5)',
           overflow: 'hidden',
-          transform: 'rotateY(180deg)'
+          transform: 'rotateY(180deg)',
+          outline: 'none'
         }}
       >
-        <div style={{ padding: '22px 20px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '16px 18px', height: '100%', display: 'flex', flexDirection: 'column' }}>
           {/* Header with close button */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px', gap: '8px' }}>
             {/* Market Icon */}
             <div 
               style={{
-                width: '48px',
-                height: '54px',
-                minWidth: '48px',
-                minHeight: '54px',
-                borderRadius: '8px',
+                width: '40px',
+                height: '40px',
+                minWidth: '40px',
+                minHeight: '40px',
+                borderRadius: '6px',
                 overflow: 'hidden',
                 flexShrink: 0,
                 background: '#1a1a1a',
@@ -630,33 +650,17 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
               <LazyImage
                 src={getMarketImage()}
                 alt={market.questionTitle || market.question || 'Market prediction'}
-                width={48}
-                height={54}
+                width={40}
+                height={40}
               />
-            </div>
-            
-            {/* Title */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h3 
-                style={{
-                  fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                  fontWeight: 600, 
-                  fontSize: '19px',
-                  lineHeight: '26px',
-                  color: '#F2F2F2',
-                  margin: 0
-                }}
-              >
-                {market.questionTitle || market.question}
-              </h3>
             </div>
             
             {/* Close button */}
             <button
               onClick={handleClose}
               style={{
-                width: '24px',
-                height: '24px',
+                width: '20px',
+                height: '20px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -664,7 +668,7 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
                 border: 'none',
                 cursor: 'pointer',
                 color: '#F2F2F2',
-                fontSize: '20px',
+                fontSize: '18px',
                 flexShrink: 0
               }}
             >
@@ -672,25 +676,43 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
             </button>
           </div>
           
+          {/* Title - Full Width */}
+          <div style={{ width: '100%', marginBottom: '14px' }}>
+            <h3 
+              style={{
+                fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                fontWeight: 600, 
+                fontSize: '15px',
+                lineHeight: '20px',
+                color: '#F2F2F2',
+                margin: 0,
+                width: '100%',
+                wordWrap: 'break-word'
+              }}
+            >
+              {market.questionTitle || market.question}
+            </h3>
+          </div>
+          
           {/* Price and Amount Section */}
-          <div style={{ marginBottom: '20px' }}>
+          <div style={{ marginBottom: '10px' }}>
             {/* Price display and Amount input */}
             <div style={{ 
               display: 'flex', 
               alignItems: 'center', 
-              gap: '8px', 
-              marginBottom: '12px',
-              padding: '12px',
+              gap: '6px', 
+              marginBottom: '10px',
+              padding: '10px',
               background: 'rgba(55, 55, 55, 0.4)',
-              borderRadius: '8px',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
+              borderRadius: '6px',
+              border: 'none'
             }}>
               <div style={{ 
                 fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                 fontWeight: 500,
-                fontSize: '18px',
+                fontSize: '16px',
                 color: '#F2F2F2',
-                minWidth: '60px'
+                minWidth: '50px'
               }}>
                 ${priceInDollars}
               </div>
@@ -711,30 +733,31 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
                   color: '#F2F2F2',
                   fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                   fontWeight: 500,
-                  fontSize: '18px',
+                  fontSize: '15px',
                   textAlign: 'right',
-                  padding: '0 8px'
+                  padding: '0 6px'
                 }}
               />
               <div style={{ 
                 display: 'flex', 
-                gap: '6px'
+                gap: '4px'
               }}>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleIncrement(1); }}
                   style={{
-                    width: '32px',
-                    height: '32px',
+                    width: '28px',
+                    height: '28px',
                     background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '6px',
+                    border: 'none',
+                    borderRadius: '5px',
                     color: '#F2F2F2',
                     cursor: 'pointer',
-                    fontSize: '14px',
+                    fontSize: '12px',
                     fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    outline: 'none'
                   }}
                 >
                   +1
@@ -742,18 +765,19 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
                 <button
                   onClick={(e) => { e.stopPropagation(); handleIncrement(10); }}
                   style={{
-                    width: '32px',
-                    height: '32px',
+                    width: '28px',
+                    height: '28px',
                     background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '6px',
+                    border: 'none',
+                    borderRadius: '5px',
                     color: '#F2F2F2',
                     cursor: 'pointer',
-                    fontSize: '14px',
+                    fontSize: '12px',
                     fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    outline: 'none'
                   }}
                 >
                   +10
@@ -762,7 +786,27 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
             </div>
             
             {/* Slider */}
-            <div style={{ marginBottom: '12px' }}>
+            <div style={{ 
+              marginBottom: '10px',
+              position: 'relative',
+              height: '10px',
+              background: 'rgba(55, 55, 55, 0.9)',
+              borderRadius: '5px',
+              overflow: 'visible'
+            }}>
+              <div style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: `${sliderPercentage}%`,
+                height: '100%',
+                background: selectedSide === 'yes' 
+                  ? 'rgba(67, 199, 115, 1)' 
+                  : 'rgba(225, 55, 55, 1)',
+                borderRadius: '5px',
+                transition: 'width 0.1s ease',
+                zIndex: 0
+              }} />
               <input
                 type="range"
                 min="0"
@@ -771,53 +815,57 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
                 onChange={handleSliderChange}
                 onClick={(e) => e.stopPropagation()}
                 style={{
+                  position: 'absolute',
                   width: '100%',
-                  height: '6px',
-                  background: 'rgba(55, 55, 55, 0.6)',
-                  borderRadius: '3px',
+                  height: '10px',
+                  background: 'transparent',
+                  borderRadius: '5px',
                   outline: 'none',
                   cursor: 'pointer',
                   WebkitAppearance: 'none',
-                  appearance: 'none'
+                  appearance: 'none',
+                  zIndex: 2,
+                  margin: 0,
+                  padding: 0
                 }}
               />
               <style>{`
+                input[type="range"] {
+                  margin: 0;
+                  padding: 0;
+                }
                 input[type="range"]::-webkit-slider-thumb {
                   -webkit-appearance: none;
                   appearance: none;
-                  width: 18px;
-                  height: 18px;
-                  background: #F2F2F2;
+                  width: 12px;
+                  height: 12px;
+                  background: #1a1a1a;
                   border-radius: 50%;
                   cursor: pointer;
-                  box-shadow: 0 0 4px rgba(0,0,0,0.3);
+                  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+                  border: 2px solid #FFFFFF;
+                  margin-top: -2px;
                 }
                 input[type="range"]::-moz-range-thumb {
-                  width: 18px;
-                  height: 18px;
-                  background: #F2F2F2;
+                  width: 12px;
+                  height: 12px;
+                  background: #1a1a1a;
                   border-radius: 50%;
                   cursor: pointer;
-                  border: none;
-                  box-shadow: 0 0 4px rgba(0,0,0,0.3);
+                  border: 2px solid #FFFFFF;
+                  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
                 }
                 input[type="range"]::-webkit-slider-runnable-track {
-                  background: linear-gradient(90deg, 
-                    rgba(100, 150, 255, 0.6) 0%, 
-                    rgba(150, 100, 255, 0.6) 50%, 
-                    rgba(55, 55, 55, 0.6) 50%
-                  );
-                  height: 6px;
-                  border-radius: 3px;
+                  background: transparent;
+                  height: 10px;
+                  border-radius: 5px;
+                  margin: 0;
+                  padding: 0;
                 }
                 input[type="range"]::-moz-range-track {
-                  background: linear-gradient(90deg, 
-                    rgba(100, 150, 255, 0.6) 0%, 
-                    rgba(150, 100, 255, 0.6) 50%, 
-                    rgba(55, 55, 55, 0.6) 50%
-                  );
-                  height: 6px;
-                  border-radius: 3px;
+                  background: transparent;
+                  height: 10px;
+                  border-radius: 5px;
                 }
               `}</style>
             </div>
@@ -827,23 +875,25 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
           <button
             onClick={handleBuyClick}
             disabled={isBuying || buyAmountNum <= 0 || !isConnected}
-            style={{
-              width: '100%',
-              height: '50px',
-              background: selectedSide === 'yes' 
-                ? 'rgba(67, 199, 115, 0.9)' 
-                : 'rgba(225, 55, 55, 0.9)',
+            type="button"
+              style={{
+                width: '100%',
+                height: '50px',
+                padding: '10px',
+                background: selectedSide === 'yes' 
+                  ? 'rgba(67, 199, 115, 1)' 
+                  : 'rgba(225, 55, 55, 1)',
               border: 'none',
               borderRadius: '8px',
               cursor: isBuying || buyAmountNum <= 0 || !isConnected ? 'not-allowed' : 'pointer',
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '4px',
               opacity: isBuying || buyAmountNum <= 0 || !isConnected ? 0.6 : 1,
               transition: 'all 0.2s ease',
-              marginTop: 'auto'
+              marginTop: 'auto',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+              outline: 'none'
             }}
             onMouseEnter={(e) => {
               if (!isBuying && buyAmountNum > 0 && isConnected) {
@@ -853,30 +903,19 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
             }}
           >
             <span 
               style={{
                 fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                 fontWeight: 600,
-                fontSize: '17px',
-                lineHeight: '24px',
+                fontSize: '16px',
+                lineHeight: '22px',
                 color: '#FFFFFF'
               }}
             >
               Buy {selectedSide === 'yes' ? 'Yes' : 'No'}
-            </span>
-            <span 
-              style={{
-                fontFamily: '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                fontWeight: 400,
-                fontSize: '13px',
-                lineHeight: '18px',
-                color: 'rgba(255, 255, 255, 0.9)'
-              }}
-            >
-          
             </span>
           </button>
         </div>

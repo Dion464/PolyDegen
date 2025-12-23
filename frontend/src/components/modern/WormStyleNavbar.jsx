@@ -393,7 +393,7 @@ const WormStyleNavbar = () => {
                 height={34}
                 className="flex-shrink-0"
               />
-              <span className="text-white font-semibold" style={{ fontFamily: '"Clash Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+              <span className=" font-medium text-[24.5px]" style={{ fontFamily: '"Clash Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
                 PolyDegen
               </span>
             </button>
