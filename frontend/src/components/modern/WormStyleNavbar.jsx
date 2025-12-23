@@ -386,7 +386,7 @@ const WormStyleNavbar = () => {
               className="flex items-center gap-2 hover:opacity-90 transition-opacity"
               aria-label="Go to homepage"
             >
-            
+            PolyDegen 
             </button>
 
             <div
