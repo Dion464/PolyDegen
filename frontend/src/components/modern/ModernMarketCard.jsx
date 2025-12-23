@@ -5,6 +5,20 @@ import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
 import '../../pages/market/MarketDetailGlass.css';
 
+// API base URL resolution
+const resolveApiBase = () => {
+  const envBase = import.meta.env.VITE_API_BASE_URL;
+  const isLocal8080 = envBase && /localhost:8080|127\.0\.0\.1:8080/i.test(envBase);
+  if (envBase && !isLocal8080) {
+    return envBase;
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+  return '';
+};
+const API_BASE = resolveApiBase();
+
 // GPU-accelerated shimmer style
 const skeletonShimmerStyle = {
   background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%)',
@@ -141,7 +155,7 @@ const getTimeRemaining = (endTime, resolutionDateTime) => {
 
 const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
   const history = useHistory();
-  const { isConnected, buyShares, ethBalance } = useWeb3();
+  const { isConnected, buyShares, ethBalance, account } = useWeb3();
   
   // Flip state
   const [isFlipped, setIsFlipped] = useState(false);
@@ -244,7 +258,46 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
     
     try {
       setIsBuying(true);
-      await buyShares(market.id, selectedSide === 'yes', buyAmount);
+      const receipt = await buyShares(market.id, selectedSide === 'yes', buyAmount);
+      
+      // Calculate cost and shares for position update
+      const costWei = ethers.utils.parseUnits(buyAmount, 18).toString();
+      const currentPricePercent = selectedSide === 'yes' 
+        ? (market.yesPrice || 50) / 100
+        : (market.noPrice || 50) / 100;
+      // Calculate actual shares: cost / price
+      const sharesAmount = buyAmountNum / Math.max(currentPricePercent, 0.01);
+      const sharesWei = ethers.utils.parseUnits(sharesAmount.toFixed(18), 18).toString();
+      
+      // Update position in database IMMEDIATELY after successful trade
+      if (account) {
+        try {
+          console.log('📝 Updating position...', { marketId: market.id.toString(), account, selectedSide, sharesWei });
+          const posResponse = await fetch(`${API_BASE}/api/update-position`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              marketId: market.id.toString(),
+              userAddress: account,
+              isYes: selectedSide === 'yes',
+              isBuy: true,
+              sharesWei: sharesWei,
+              costWei: costWei,
+              txHash: receipt?.transactionHash || receipt?.hash || null,
+              blockNumber: receipt?.blockNumber?.toString() || null
+            })
+          });
+          const posResult = await posResponse.json();
+          if (posResponse.ok && posResult.success) {
+            console.log('✅ Position updated in database:', posResult.position);
+          } else {
+            console.error('⚠️ Position update failed:', posResult);
+          }
+        } catch (positionErr) {
+          console.error('⚠️ Failed to update position:', positionErr);
+        }
+      }
+      
       toast.success(`${selectedSide === 'yes' ? 'YES' : 'NO'} shares purchased!`);
       setIsFlipped(false);
       setBuyAmount('0.1');
