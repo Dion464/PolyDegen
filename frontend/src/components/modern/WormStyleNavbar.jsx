@@ -386,7 +386,16 @@ const WormStyleNavbar = () => {
               className="flex items-center gap-2 hover:opacity-90 transition-opacity"
               aria-label="Go to homepage"
             >
-            PolyDegen 
+              <img 
+                src="/logopd.svg" 
+                alt="PolyDegen Logo" 
+                width={26} 
+                height={34}
+                className="flex-shrink-0"
+              />
+              <span className="text-white font-semibold" style={{ fontFamily: '"Clash Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+                PolyDegen
+              </span>
             </button>
 
             <div
