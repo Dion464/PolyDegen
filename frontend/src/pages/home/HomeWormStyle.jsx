@@ -689,11 +689,7 @@ const HomeWormStyle = () => {
                             fontSize: '19px',
                             lineHeight: '26px',
                             color: '#F2F2F2',
-                            margin: 0,
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden'
+                            margin: 0
                           }}
                         >
                           {market.question}
@@ -711,8 +707,11 @@ const HomeWormStyle = () => {
                         
                         </span>
                       </div>
-                      
-                      {/* End Time */}
+                    </div>
+                    
+                    {/* Middle Section: Volume + Progress Bar with Percentage */}
+                    <div style={{ marginBottom: '14px' }}>
+                      {/* End Time above Volume */}
                       {getTimeRemaining(market.endTime, market.resolutionTime) && (
                         <div 
                           style={{
@@ -721,17 +720,13 @@ const HomeWormStyle = () => {
                             fontSize: '14px',
                             lineHeight: '19px',
                             color: '#F2F2F2',
-                            flexShrink: 0,
-                            whiteSpace: 'nowrap'
+                            marginBottom: '6px'
                           }}
                         >
                           {getTimeRemaining(market.endTime, market.resolutionTime)}
                         </div>
                       )}
-                    </div>
-                    
-                    {/* Middle Section: Volume + Progress Bar with Percentage */}
-                    <div style={{ marginBottom: '14px' }}>
+                      
                       {/* Volume and Percentage row */}
                       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '6px' }}>
                         {/* Volume on left */}
