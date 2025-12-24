@@ -1,4 +1,4 @@
-import React, { useState, memo, useEffect } from 'react';
+import React, { useState, memo, useEffect, useCallback } from 'react';
 import { useHistory } from 'react-router-dom';
 import { useWeb3 } from '../../hooks/useWeb3';
 import { ethers } from 'ethers';
@@ -155,7 +155,19 @@ const getTimeRemaining = (endTime, resolutionDateTime) => {
 
 const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
   const history = useHistory();
-  const { isConnected, buyShares, ethBalance, account } = useWeb3();
+  const { isConnected, buyShares, ethBalance, account, contracts } = useWeb3();
+  
+  // Normalize decimal input (same as trading interface)
+  const normalizeDecimal = (value) => {
+    if (value === null || value === undefined || value === '') {
+      throw new Error('Invalid amount: value cannot be empty');
+    }
+    const str = value.toString().trim().replace(/,/g, '.');
+    if (!str || str === '.' || str === '-' || isNaN(Number(str))) {
+      throw new Error('Invalid amount: please enter a valid number');
+    }
+    return str;
+  };
   
   // Flip state
   const [isFlipped, setIsFlipped] = useState(false);
@@ -163,15 +175,36 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
   const [buyAmount, setBuyAmount] = useState('0.1');
   const [isBuying, setIsBuying] = useState(false);
   
+  // Local price state for instant updates after trades
+  const [localYesPrice, setLocalYesPrice] = useState(null);
+  const [localNoPrice, setLocalNoPrice] = useState(null);
+  
+  // Initialize local prices from market prop when it changes
+  // Convert from basis points to percentage if needed (market.yesPrice might be in basis points or percentage)
+  useEffect(() => {
+    if (market.yesPrice != null && market.noPrice != null) {
+      // If price is > 100, it's in basis points, divide by 100. Otherwise it's already a percentage.
+      const yesPricePercent = market.yesPrice > 100 ? Math.round(market.yesPrice / 100) : Math.round(market.yesPrice);
+      const noPricePercent = market.noPrice > 100 ? Math.round(market.noPrice / 100) : Math.round(market.noPrice);
+      setLocalYesPrice(yesPricePercent);
+      setLocalNoPrice(noPricePercent);
+    }
+  }, [market.yesPrice, market.noPrice]);
+  
   // Check if prices are still loading
   const isPriceLoading = market._priceLoading || (market.yesPrice == null && market.noPrice == null);
   
-  // Use actual prices from market if available (from blockchain), otherwise calculate from probability
+  // Use local prices if available (updated after trades), otherwise use market prop
   let yesPrice, noPrice;
-  if (market.yesPrice != null && market.noPrice != null) {
-    // Prices are already in cents from blockchain
-    yesPrice = Math.round(market.yesPrice);
-    noPrice = Math.round(market.noPrice);
+  if (localYesPrice != null && localNoPrice != null) {
+    // Use local prices (most up-to-date, already in percentage)
+    yesPrice = localYesPrice;
+    noPrice = localNoPrice;
+  } else if (market.yesPrice != null && market.noPrice != null) {
+    // Convert from basis points to percentage if needed
+    // If price is > 100, it's in basis points, divide by 100. Otherwise it's already a percentage.
+    yesPrice = market.yesPrice > 100 ? Math.round(market.yesPrice / 100) : Math.round(market.yesPrice);
+    noPrice = market.noPrice > 100 ? Math.round(market.noPrice / 100) : Math.round(market.noPrice);
   } else if (!isPriceLoading) {
     // Fallback to probability calculation only if not loading
     const probability = market.currentProbability || market.initialProbability || 0.5;
@@ -196,7 +229,7 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
   
   const handleNavigateToMarket = () => {
     if (!isFlipped) {
-      history.push(`/markets/${market.id}`);
+    history.push(`/markets/${market.id}`);
     }
   };
 
@@ -239,6 +272,74 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
     setBuyAmount(newAmount.toFixed(4));
   };
   
+  // Fetch fresh prices from chain (same as trading interface)
+  const fetchFreshPrices = useCallback(async () => {
+    if (!contracts?.predictionMarket || !market.id) return null;
+
+    try {
+      const yesPrice = await contracts.predictionMarket.getCurrentPrice(market.id, true);
+      const noPrice = await contracts.predictionMarket.getCurrentPrice(market.id, false);
+      
+      const yesPriceBps = parseFloat(yesPrice.toString());
+      const noPriceBps = parseFloat(noPrice.toString());
+      const yesPriceCents = yesPriceBps / 100;
+      const noPriceCents = noPriceBps / 100;
+      
+      // Update local prices immediately (convert from basis points to percentage)
+      setLocalYesPrice(Math.round(yesPriceBps / 100));
+      setLocalNoPrice(Math.round(noPriceBps / 100));
+      
+      return { yesPriceCents, noPriceCents };
+    } catch (err) {
+      console.error('Failed to fetch fresh prices from chain:', err);
+      return null;
+    }
+  }, [contracts?.predictionMarket, market.id]);
+
+  // Event-driven price updates (listen for trades to update prices instantly)
+  useEffect(() => {
+    if (!contracts?.predictionMarket || !market.id) return;
+
+    const contract = contracts.predictionMarket;
+    let normalizedMarketId;
+    try {
+      normalizedMarketId = ethers.BigNumber.from(market.id);
+    } catch {
+      return;
+    }
+
+    // Event handler - updates price instantly when trade happens
+    const handlePriceUpdate = async (eventMarketId, _addr, _isYes, _shares, _amount, _newPrice) => {
+      if (!eventMarketId.eq(normalizedMarketId)) return;
+      
+      // Always fetch fresh prices from chain after event (more reliable than using event price)
+      setTimeout(() => {
+        fetchFreshPrices();
+      }, 500);
+    };
+
+    // Subscribe to trade events (filtered by marketId for efficiency)
+    const purchaseFilter = contract.filters.SharesPurchased(market.id);
+    const sellFilter = contract.filters.SharesSold(market.id);
+    
+    contract.on(purchaseFilter, handlePriceUpdate);
+    contract.on(sellFilter, handlePriceUpdate);
+
+    // Initial fetch - always get fresh prices from chain
+    fetchFreshPrices();
+
+    // Poll every 10 seconds to always have current prices
+    const pricePollInterval = setInterval(() => {
+      fetchFreshPrices();
+    }, 10000);
+
+    return () => {
+      contract.off(purchaseFilter, handlePriceUpdate);
+      contract.off(sellFilter, handlePriceUpdate);
+      clearInterval(pricePollInterval);
+    };
+  }, [contracts?.predictionMarket, market.id, fetchFreshPrices]);
+
   const handleBuyClick = async (e) => {
     e.stopPropagation();
     if (!isConnected) {
@@ -255,18 +356,43 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
       toast.error('Insufficient balance');
       return;
     }
+
+    // Check if market has ended
+    const endTime = market?.endTime || market?.resolutionTime;
+    if (endTime) {
+      const endDate = new Date(typeof endTime === 'number' ? endTime * 1000 : endTime);
+      if (endDate < new Date()) {
+        toast.error('This market has ended. Trading is no longer available.');
+        return;
+      }
+    }
+
+    // Check if market is resolved
+    if (market?.resolved) {
+      toast.error('This market has been resolved. Trading is closed.');
+      return;
+    }
+
+    // Normalize amount (same as trading interface)
+    let normalizedAmount;
+    try {
+      normalizedAmount = normalizeDecimal(buyAmount);
+    } catch (err) {
+      toast.error(err.message || 'Invalid amount');
+      return;
+    }
     
     try {
       setIsBuying(true);
-      const receipt = await buyShares(market.id, selectedSide === 'yes', buyAmount);
+      const receipt = await buyShares(market.id, selectedSide === 'yes', normalizedAmount);
       
       // Calculate cost and shares for position update
-      const costWei = ethers.utils.parseUnits(buyAmount, 18).toString();
+      const costWei = ethers.utils.parseUnits(normalizedAmount, 18).toString();
       const currentPricePercent = selectedSide === 'yes' 
         ? (market.yesPrice || 50) / 100
         : (market.noPrice || 50) / 100;
       // Calculate actual shares: cost / price
-      const sharesAmount = buyAmountNum / Math.max(currentPricePercent, 0.01);
+      const sharesAmount = parseFloat(normalizedAmount) / Math.max(currentPricePercent, 0.01);
       const sharesWei = ethers.utils.parseUnits(sharesAmount.toFixed(18), 18).toString();
       
       // Update position in database IMMEDIATELY after successful trade
@@ -297,13 +423,107 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
           console.error('⚠️ Failed to update position:', positionErr);
         }
       }
+
+      // Fetch fresh prices from chain and update UI (same as trading interface)
+      if (contracts?.predictionMarket && market.id) {
+        try {
+          // Wait a moment for blockchain state to update after transaction
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          // Fetch fresh prices from chain
+          const prices = await fetchFreshPrices();
+          
+          if (prices) {
+            const { yesPriceCents, noPriceCents } = prices;
+            const yesPriceBps = Math.round(yesPriceCents * 100);
+            const noPriceBps = Math.round(noPriceCents * 100);
+            
+            // Update local prices immediately for instant UI update
+            setLocalYesPrice(yesPriceBps);
+            setLocalNoPrice(noPriceBps);
+            
+            console.log('📊 Recording price after buy:', { yesPriceBps, noPriceBps });
+            
+            // Record price snapshot to database
+            await fetch(`${API_BASE}/api/record-price`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                marketId: market.id.toString(),
+                yesPriceBps: yesPriceBps,
+                noPriceBps: noPriceBps,
+                blockNumber: receipt?.blockNumber?.toString() || null
+              })
+            });
+
+            console.log('✅ Price recorded to database');
+
+            // Create activity event for the buy
+            const priceBps = selectedSide === 'yes' ? yesPriceBps : noPriceBps;
+            
+            try {
+              await fetch(`${API_BASE}/api/activity/create`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  type: 'TRADE',
+                  marketId: market.id.toString(),
+                  userAddress: account,
+                  isYes: selectedSide === 'yes',
+                  isBuy: true,
+                  sharesWei: sharesWei,
+                  priceBps: priceBps,
+                  costWei: costWei,
+                  txHash: receipt?.transactionHash || receipt?.hash || null,
+                  blockNumber: receipt?.blockNumber?.toString() || null,
+                  blockTime: receipt?.blockNumber ? new Date().toISOString() : new Date().toISOString(),
+                  marketQuestion: market?.questionTitle || market?.question || null,
+                })
+              });
+              console.log('✅ Activity event created for buy');
+            } catch (activityErr) {
+              console.error('⚠️ Failed to create activity event:', activityErr);
+            }
+          }
+        } catch (priceErr) {
+          console.error('⚠️ Failed to record price after trade:', priceErr);
+        }
+      }
       
       toast.success(`${selectedSide === 'yes' ? 'YES' : 'NO'} shares purchased!`);
       setIsFlipped(false);
       setBuyAmount('0.1');
     } catch (error) {
       console.error('Buy failed:', error);
-      toast.error(error?.message || 'Transaction failed');
+      
+      // Parse error message for user-friendly display (same as trading interface)
+      let errorMessage = 'Transaction failed';
+      const errStr = error?.message?.toLowerCase() || '';
+      
+      if (errStr.includes('call_exception') || errStr.includes('status":0') || errStr.includes('transaction failed')) {
+        // Check for specific contract revert reasons
+        if (errStr.includes('market has ended') || errStr.includes('market closed')) {
+          errorMessage = 'This market has ended. Trading is no longer available.';
+        } else if (errStr.includes('market not active') || errStr.includes('not active')) {
+          errorMessage = 'This market is not active. It may have been resolved or paused.';
+        } else if (errStr.includes('amm') || errStr.includes('not initialized')) {
+          errorMessage = 'Market is not ready for trading yet. Please try again later.';
+        } else if (errStr.includes('insufficient')) {
+          errorMessage = 'Insufficient balance or liquidity for this trade.';
+        } else {
+          errorMessage = 'Transaction failed. The market may have ended or is temporarily unavailable.';
+        }
+      } else if (errStr.includes('user rejected') || errStr.includes('user denied')) {
+        errorMessage = 'Transaction was cancelled.';
+      } else if (errStr.includes('insufficient funds')) {
+        errorMessage = 'Insufficient balance to complete this transaction.';
+      } else if (errStr.includes('nonce')) {
+        errorMessage = 'Transaction error. Please refresh and try again.';
+      } else if (error?.message) {
+        errorMessage = error.message.length > 100 ? error.message.substring(0, 100) + '...' : error.message;
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setIsBuying(false);
     }
@@ -395,10 +615,10 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
             height: '100%',
             backfaceVisibility: 'hidden',
             WebkitBackfaceVisibility: 'hidden',
-            background: 'linear-gradient(135deg, rgba(18,18,18,0.68), rgba(40,40,40,0.52))',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            borderRadius: '14px',
+        background: 'linear-gradient(135deg, rgba(18,18,18,0.68), rgba(40,40,40,0.52))',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        borderRadius: '14px',
             border: isFlipped ? 'none' : '1px solid rgba(255, 255, 255, 0.2)',
             boxShadow: isFlipped 
               ? '0 18px 45px rgba(0, 0, 0, 0.5)' 
@@ -408,7 +628,7 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
             outline: 'none'
           }}
           className={!isFlipped ? 'hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(247,208,34,0.15)]' : ''}
-        >
+    >
       <div style={{ padding: '22px 20px', height: '100%', display: 'flex', flexDirection: 'column' }}>
         
         {/* Top Section: Icon + Title + End Time */}
@@ -456,8 +676,8 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
               {market.questionTitle || market.question}
             </h3>
           </div>
-        </div>
-        
+          </div>
+          
         {/* Middle Section: Volume + Progress Bar with Percentage */}
         <div style={{ marginBottom: '14px' }}>
           {/* End Time above Volume */}
@@ -475,7 +695,7 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
               {getTimeRemaining(market.endTime, market.resolutionDateTime)}
             </div>
           )}
-          
+        
           {/* Volume and Percentage row */}
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '6px' }}>
             {/* Volume on left */}
@@ -972,7 +1192,7 @@ const ModernMarketCard = ({ market, showBuyButtons = false, onBuy }) => {
             </span>
           </button>
         </div>
-      </div>
+        </div>
       </div>
     </div>
   );
