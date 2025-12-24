@@ -219,7 +219,7 @@ const HomeWormStyle = () => {
   };
   const API_BASE = resolveApiBase();
 
-  const categories = ['All', 'Politics', 'Sports', 'Crypto', 'Tech', 'WTF'];
+  const categories = ['All', 'Politics', 'Sports', 'Crypto', 'Tech', 'KEK'];
   
   // WebSocket for real-time market updates
   const { subscribeGlobal, onMessage } = useWebSocket();
