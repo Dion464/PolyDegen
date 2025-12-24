@@ -290,6 +290,11 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             investmentAmount = msg.value - platformFee;
         }
 
+        // Send platform fee to fee recipient
+        if (platformFee > 0 && feeRecipient != address(0)) {
+            payable(feeRecipient).transfer(platformFee);
+        }
+
         // Calculate shares based on current price
         // If price is 50¢, then 0.1 ETH should buy ~0.2 shares
         // Formula: shares = (investmentAmount * priceMultiplier) / currentPrice
@@ -422,6 +427,11 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                     uint256 totalCost = sharesToTrade * sellOrder.pricePerShare;
                     uint256 platformFee = (totalCost * platformFeePercent) / 10000;
                     uint256 sellerPayout = totalCost - platformFee;
+                    
+                    // Send platform fee to fee recipient
+                    if (platformFee > 0 && feeRecipient != address(0)) {
+                        payable(feeRecipient).transfer(platformFee);
+                    }
                     
                     // Mark orders as filled (or partially filled)
                     if (sharesToTrade == sellOrder.shares) {
@@ -562,6 +572,11 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         // Calculate platform fee (2%)
         uint256 platformFee = (totalCost * platformFeePercent) / 10000;
         uint256 sellerPayout = totalCost - platformFee;
+        
+        // Send platform fee to fee recipient
+        if (platformFee > 0 && feeRecipient != address(0)) {
+            payable(feeRecipient).transfer(platformFee);
+        }
         
         // Mark order as filled
         order.filled = true;
@@ -1233,6 +1248,11 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                     uint256 totalCost = sharesToTrade * sellOrder.pricePerShare;
                     uint256 platformFee = (totalCost * platformFeePercent) / 10000;
                     uint256 sellerPayout = totalCost - platformFee;
+                    
+                    // Send platform fee to fee recipient
+                    if (platformFee > 0 && feeRecipient != address(0)) {
+                        payable(feeRecipient).transfer(platformFee);
+                    }
                     
                     // Mark orders as filled (or partially filled)
                     if (sharesToTrade == sellOrder.shares) {

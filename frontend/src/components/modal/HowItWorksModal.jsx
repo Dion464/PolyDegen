@@ -40,13 +40,13 @@ const HowItWorksModal = ({ isOpen, onClose }) => {
       image: '/2.svg',
       number: '2',
       title: 'Place a bet',
-      description: "Fund your account with crypto, credit/debit card, or bank transfer, then you're ready to bet. No bet limits and no fees."
+      description: "Fund your account with crypto, then you're ready to bet. No bet limits. The platform charges a 2% fee on all buy and sell transactions."
     },
     {
       image: '/3.svg',
       number: '3',
       title: 'Profit',
-      description: "Sell your 'Yes' or 'No' shares at any time, or wait until the market ends to redeem winning shares for $1 each. Create an account and place your first trade in minutes."
+      description: "Sell your 'Yes' or 'No' shares at any time, or wait until the market resolves. When a market ends, the losing side's pool (all their money) goes to the winning side. The platform takes a 2% fee from all transactions and winnings."
     }
   ];
 
