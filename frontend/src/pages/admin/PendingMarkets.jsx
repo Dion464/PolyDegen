@@ -255,6 +255,7 @@ const PendingMarkets = () => {
       const apiBaseUrl = resolveApiBase();
 
       // Create activity event for market creation
+      // Use the original creator's address, not the admin's
       try {
         await fetch(`${apiBaseUrl}/api/activity/create`, {
           method: 'POST',
@@ -262,7 +263,7 @@ const PendingMarkets = () => {
           body: JSON.stringify({
             type: 'MARKET_CREATED',
             marketId: marketId,
-            creator: account,
+            creator: pendingMarket.creator, // Use original creator, not admin
             question: pendingMarket.question,
             category: pendingMarket.category,
             txHash: receipt.transactionHash,
