@@ -423,21 +423,17 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                 uint256 sharesToTrade = sellOrder.shares < sharesLimitOrderCanBuy ? sellOrder.shares : sharesLimitOrderCanBuy;
                 
                 if (sharesToTrade > 0) {
-                    // Execute the match
                     uint256 totalCost = sharesToTrade * sellOrder.pricePerShare;
                     uint256 platformFee = (totalCost * platformFeePercent) / 10000;
                     uint256 sellerPayout = totalCost - platformFee;
                     
-                    // Send platform fee to fee recipient
                     if (platformFee > 0 && feeRecipient != address(0)) {
                         payable(feeRecipient).transfer(platformFee);
                     }
                     
-                    // Mark orders as filled (or partially filled)
                     if (sharesToTrade == sellOrder.shares) {
                         sellOrder.filled = true;
                     } else {
-                        // Partial fill - reduce sell order shares
                         sellOrder.shares -= sharesToTrade;
                     }
                     
@@ -445,20 +441,17 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                         limitOrder.filled = true;
                         limitOrder.amount = 0;
                     } else {
-                        // Partial fill - reduce limit order amount
                         limitOrder.amount -= totalCost;
                     }
                     
-                    // Transfer shares to limit order buyer
-                    Position storage buyerPosition = positions[sellOrder.marketId][limitOrder.trader];
+                    Position storage buyerPos = positions[sellOrder.marketId][limitOrder.trader];
                     if (sellOrder.isYes) {
-                        buyerPosition.yesShares += sharesToTrade;
+                        buyerPos.yesShares += sharesToTrade;
                     } else {
-                        buyerPosition.noShares += sharesToTrade;
+                        buyerPos.noShares += sharesToTrade;
                     }
-                    buyerPosition.totalInvested += totalCost;
+                    buyerPos.totalInvested += totalCost;
                     
-                    // Pay seller
                     payable(sellOrder.seller).transfer(sellerPayout);
                     
                     // Refund excess ETH from limit order if any
@@ -1006,8 +999,13 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             if (market.outcome == 1 && position.yesShares > 0) {
                 // YES won
                 require(market.totalYesShares > 0, "No winning shares");
-                userInvestment = position.yesInvested;
                 
+                // User's investment = their share of YES pool (based on shares)
+                if (market.totalYesShares > 0 && market.yesPool > 0) {
+                    userInvestment = (market.yesPool * position.yesShares) / market.totalYesShares;
+                }
+                
+                // Calculate share of NO pool (losing side) based on YES shares
                 if (market.totalYesShares > 0 && market.noPool > 0) {
                     losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
                 }
@@ -1020,8 +1018,13 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             } else if (market.outcome == 2 && position.noShares > 0) {
                 // NO won
                 require(market.totalNoShares > 0, "No winning shares");
-                userInvestment = position.noInvested;
                 
+                // User's investment = their share of NO pool (based on shares)
+                if (market.totalNoShares > 0 && market.noPool > 0) {
+                    userInvestment = (market.noPool * position.noShares) / market.totalNoShares;
+                }
+                
+                // Calculate share of YES pool (losing side) based on NO shares
                 if (market.totalNoShares > 0 && market.yesPool > 0) {
                     losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
                 }
@@ -1095,11 +1098,15 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         uint256 losingPoolShare = 0;
         
         if (market.outcome == 1 && position.yesShares > 0) {
-            // YES won - user gets YES investment back + share of NO pool
+            // YES won - user gets their share of total pool based on YES shares
             require(market.totalYesShares > 0, "No winning shares");
-            userInvestment = position.yesInvested; // Refund their YES investment
             
-            // Calculate share of NO pool (losing side)
+            // User's investment = their share of YES pool (based on shares)
+            if (market.totalYesShares > 0 && market.yesPool > 0) {
+                userInvestment = (market.yesPool * position.yesShares) / market.totalYesShares;
+            }
+            
+            // Calculate share of NO pool (losing side) based on YES shares
             if (market.totalYesShares > 0 && market.noPool > 0) {
                 losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
             }
@@ -1111,11 +1118,15 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             position.noShares = 0;
             position.noInvested = 0;
         } else if (market.outcome == 2 && position.noShares > 0) {
-            // NO won - user gets NO investment back + share of YES pool
+            // NO won - user gets their share of total pool based on NO shares
             require(market.totalNoShares > 0, "No winning shares");
-            userInvestment = position.noInvested; // Refund their NO investment
             
-            // Calculate share of YES pool (losing side)
+            // User's investment = their share of NO pool (based on shares)
+            if (market.totalNoShares > 0 && market.noPool > 0) {
+                userInvestment = (market.noPool * position.noShares) / market.totalNoShares;
+            }
+            
+            // Calculate share of YES pool (losing side) based on NO shares
             if (market.totalNoShares > 0 && market.yesPool > 0) {
                 losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
             }
@@ -1177,27 +1188,6 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         }
     }
 
-    // Calculate shares for purchase using AMM formula
-    function calculateSharesForPurchase(uint256 _marketId, bool _isYes, uint256 _amount) public view returns (uint256) {
-        Market storage market = markets[_marketId];
-        
-        if (market.totalYesShares == 0 && market.totalNoShares == 0) {
-            // First trade - return amount directly as shares (1:1 ratio)
-            return _amount;
-        }
-
-        // For simplicity, use a 1:1 ratio for now
-        // This means 1 ETH invested = 1 share received
-        // This is more predictable and user-friendly
-        return _amount;
-    }
-
-    // Calculate payout for selling shares
-    function calculatePayoutForSale(uint256 _marketId, bool _isYes, uint256 _shares) public view returns (uint256) {
-        // For simplicity, use 1:1 ratio for selling too
-        // This means 1 share = 1 ETH payout
-        return _shares;
-    }
 
     // Get current price (probability) for YES or NO using LMSR
     function getCurrentPrice(uint256 _marketId, bool _isYes) public view returns (uint256) {
