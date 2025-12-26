@@ -122,6 +122,7 @@ enum PendingMarketStatus {
   PENDING
   APPROVED
   REJECTED
+  DEPLOYED
 }
 
 model PendingMarket {
