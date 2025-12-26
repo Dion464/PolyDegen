@@ -3,15 +3,15 @@
   "chainId": 28802,
   "contracts": {
     "ETHPredictionMarket": {
-      "address": "0x0fA396C31D8756339fF15Eb2c457DF1a121e1AC7",
+      "address": "0x5fa52dF63dCb71b81053aD30Eaf885e4b3EA5081",
       "deployer": "0xed27C34A8434ADc188A2D7503152024F64967B61",
       "deploymentBlock": null,
-      "transactionHash": "0xa9786460dd6d4e1c90e1353ab4d8114545573f4a9bdec56706b1fce78d4957a1"
+      "transactionHash": "0x0289954865df3970c8e3ca971a5536784abfeab315f325e5780d4fcc1ea52523"
     }
   },
   "config": {
     "marketCreationFee": "0.01",
     "platformFeePercent": "200"
   },
-  "timestamp": "2025-12-26T12:20:18.298Z"
+  "timestamp": "2025-12-26T14:07:01.445Z"
 }

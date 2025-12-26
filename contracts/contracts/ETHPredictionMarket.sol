@@ -997,15 +997,13 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             uint256 losingPoolShare = 0;
             
             if (market.outcome == 1 && position.yesShares > 0) {
-                // YES won
+                // YES won - give back investment + percentage of losing pool
                 require(market.totalYesShares > 0, "No winning shares");
                 
-                // User's investment = their share of YES pool (based on shares)
-                if (market.totalYesShares > 0 && market.yesPool > 0) {
-                    userInvestment = (market.yesPool * position.yesShares) / market.totalYesShares;
-                }
+                // Give back what they invested
+                userInvestment = position.yesInvested;
                 
-                // Calculate share of NO pool (losing side) based on YES shares
+                // Calculate percentage share of losing pool
                 if (market.totalYesShares > 0 && market.noPool > 0) {
                     losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
                 }
@@ -1016,15 +1014,13 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                 position.noShares = 0;
                 position.noInvested = 0;
             } else if (market.outcome == 2 && position.noShares > 0) {
-                // NO won
+                // NO won - give back investment + percentage of losing pool
                 require(market.totalNoShares > 0, "No winning shares");
                 
-                // User's investment = their share of NO pool (based on shares)
-                if (market.totalNoShares > 0 && market.noPool > 0) {
-                    userInvestment = (market.noPool * position.noShares) / market.totalNoShares;
-                }
+                // Give back what they invested
+                userInvestment = position.noInvested;
                 
-                // Calculate share of YES pool (losing side) based on NO shares
+                // Calculate percentage share of losing pool
                 if (market.totalNoShares > 0 && market.yesPool > 0) {
                     losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
                 }
@@ -1098,15 +1094,14 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         uint256 losingPoolShare = 0;
         
         if (market.outcome == 1 && position.yesShares > 0) {
-            // YES won - user gets their share of total pool based on YES shares
+            // YES won - user gets their investment back + percentage share of NO pool
             require(market.totalYesShares > 0, "No winning shares");
             
-            // User's investment = their share of YES pool (based on shares)
-            if (market.totalYesShares > 0 && market.yesPool > 0) {
-                userInvestment = (market.yesPool * position.yesShares) / market.totalYesShares;
-            }
+            // Give back what they invested
+            userInvestment = position.yesInvested;
             
-            // Calculate share of NO pool (losing side) based on YES shares
+            // Calculate user's percentage of winning shares
+            // Then split losing pool by that percentage
             if (market.totalYesShares > 0 && market.noPool > 0) {
                 losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
             }
@@ -1118,15 +1113,14 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             position.noShares = 0;
             position.noInvested = 0;
         } else if (market.outcome == 2 && position.noShares > 0) {
-            // NO won - user gets their share of total pool based on NO shares
+            // NO won - user gets their investment back + percentage share of YES pool
             require(market.totalNoShares > 0, "No winning shares");
             
-            // User's investment = their share of NO pool (based on shares)
-            if (market.totalNoShares > 0 && market.noPool > 0) {
-                userInvestment = (market.noPool * position.noShares) / market.totalNoShares;
-            }
+            // Give back what they invested
+            userInvestment = position.noInvested;
             
-            // Calculate share of YES pool (losing side) based on NO shares
+            // Calculate user's percentage of winning shares
+            // Then split losing pool by that percentage
             if (market.totalNoShares > 0 && market.yesPool > 0) {
                 losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
             }

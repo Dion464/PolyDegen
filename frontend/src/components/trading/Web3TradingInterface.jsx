@@ -1286,7 +1286,7 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span style={{ fontFamily: homePageFont, fontWeight: 300, fontSize: '12px', lineHeight: '16px', color: '#8B8B8B' }}>2% Platform fee on buy/sell </span>
-              <span style={{ fontFamily: homePageFont, fontWeight: 400, fontSize: '13px', lineHeight: '16px', color: '#FFFFFF' }}>${(currentPrice / 100).toFixed(2)}</span>
+  
             </div>
            
           </div>
