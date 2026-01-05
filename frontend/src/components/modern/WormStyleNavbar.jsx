@@ -55,7 +55,7 @@ const WormStyleNavbar = () => {
 
   const openExplorer = () => {
     if (account) {
-      window.open(`https://explorer.incentiv.io/address/${account}`, '_blank');
+      window.open(`https://testnet.incentiv.net/address/${account}`, '_blank');
     }
   };
 
@@ -629,7 +629,7 @@ const WormStyleNavbar = () => {
                     <span className="text-white font-medium text-[11px] sm:text-[12px]">
                       {formattedBalance}
                     </span>
-                    <span className="text-white/80 text-[11px] sm:text-[12px]">CENT</span>
+                    <span className="text-white/80 text-[11px] sm:text-[12px]">TCENT</span>
                     <img 
                       src="/incentivelogocircle.png" 
                       alt="CENT" 
@@ -695,7 +695,7 @@ const WormStyleNavbar = () => {
                           />
                           <div>
                             <p className="text-white text-[20px] font-semibold">
-                              {parseFloat(ethBalance || '0').toLocaleString('en-US', { maximumFractionDigits: 3 })} CENT
+                              {parseFloat(ethBalance || '0').toLocaleString('en-US', { maximumFractionDigits: 3 })} TCENT
                             </p>
                           </div>
                         </div>
