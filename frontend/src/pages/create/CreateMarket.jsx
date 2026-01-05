@@ -57,8 +57,16 @@ const CreateMarket = () => {
     'Politics',
     'Sports',
     'Crypto',
+    'Finance',
+    'Geopolitics',
+    'Earnings',
     'Tech',
-    'KEK'
+    'Culture',
+    'World',
+    'Economy',
+    'Climate & Science',
+    'Elections',
+    'Mentions'
   ];
 
   const handleImageFile = (file) => {
