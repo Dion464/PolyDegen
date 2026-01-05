@@ -65,12 +65,12 @@ const CreateMarket = () => {
   const handleImageFile = (file) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      showGlassToast({ title: 'Please upload an image file (PNG/JPG/GIF)', icon: '⚠️' });
+      showGlassToast({ title: 'Please upload an image file (PNG/JPG/GIF)' });
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      showGlassToast({ title: 'Image too large. Max 5MB.', icon: '⚠️' });
+      showGlassToast({ title: 'Image too large. Max 5MB.' });
       return;
     }
 
@@ -79,7 +79,7 @@ const CreateMarket = () => {
       const result = reader.result;
       setFormData(prev => ({ ...prev, imageUrl: result }));
       setImagePreview(result);
-      showGlassToast({ title: 'Image attached successfully!', icon: '🖼️' });
+      showGlassToast({ title: 'Image attached successfully!' });
     };
     reader.readAsDataURL(file);
   };
@@ -131,18 +131,18 @@ const CreateMarket = () => {
     e.preventDefault();
 
     if (!isConnected || !signer) {
-      showGlassToast({ title: 'Please connect your wallet to submit a market', icon: '⚠️' });
+      showGlassToast({ title: 'Please connect your wallet to submit a market' });
       return;
     }
 
     // Validation
     if (!formData.question.trim()) {
-      showGlassToast({ title: 'Please enter a question', icon: '⚠️' });
+      showGlassToast({ title: 'Please enter a question' });
       return;
     }
 
     if (!formData.endDate || !formData.resolutionDate) {
-      showGlassToast({ title: 'Please set end date and resolution date', icon: '⚠️' });
+      showGlassToast({ title: 'Please set end date and resolution date' });
       return;
     }
 
@@ -151,12 +151,12 @@ const CreateMarket = () => {
     const now = new Date();
 
     if (endTime <= now) {
-      showGlassToast({ title: 'End date must be in the future', icon: '⚠️' });
+      showGlassToast({ title: 'End date must be in the future' });
       return;
     }
 
     if (resolutionTime <= endTime) {
-      showGlassToast({ title: 'Resolution date must be after end date', icon: '⚠️' });
+      showGlassToast({ title: 'Resolution date must be after end date' });
       return;
     }
 
@@ -164,7 +164,7 @@ const CreateMarket = () => {
 
     // Payment is REQUIRED - fail if recipient not configured
     if (!submissionFeeRecipient || !ethers.utils.isAddress(submissionFeeRecipient)) {
-      showGlassToast({ title: 'Submission fee recipient not configured. Please contact support.', icon: '❌' });
+      showGlassToast({ title: 'Submission fee recipient not configured. Please contact support.' });
       setIsSubmitting(false);
       return;
     }
@@ -176,7 +176,7 @@ const CreateMarket = () => {
     try {
       setIsPayingFee(true);
       const submissionFeeWei = ethers.utils.parseEther(SUBMISSION_FEE_TCENT);
-      showGlassToast({ title: `Paying ${SUBMISSION_FEE_TCENT} TCENT submission fee...`, icon: '⏳' });
+      showGlassToast({ title: `Paying ${SUBMISSION_FEE_TCENT} TCENT submission fee...` });
       
       const feeTx = await signer.sendTransaction({
         to: submissionFeeRecipient,
@@ -186,13 +186,13 @@ const CreateMarket = () => {
       feeTxHash = feeTx.hash;
       feeAmountWei = submissionFeeWei.toString();
       
-      showGlassToast({ title: 'Waiting for fee payment confirmation...', icon: '⏳' });
+      showGlassToast({ title: 'Waiting for fee payment confirmation...' });
       await feeTx.wait();
       
-      showGlassToast({ title: 'Submission fee paid!', icon: '✅' });
+      showGlassToast({ title: 'Submission fee paid!' });
     } catch (feeError) {
       console.error('Fee payment failed:', feeError);
-      showGlassToast({ title: `Fee payment failed: ${feeError.message || 'Transaction rejected'}. Market submission cancelled.`, icon: '❌' });
+      showGlassToast({ title: `Fee payment failed: ${feeError.message || 'Transaction rejected'}. Market submission cancelled.` });
       setIsSubmitting(false);
       setIsPayingFee(false);
       return;
@@ -245,7 +245,7 @@ const CreateMarket = () => {
 
       // Success - show toast and log for debugging
       console.log('✅ Market submitted successfully:', data);
-      showGlassToast({ title: 'Market submitted for approval! 🎉', icon: '✅' });
+      showGlassToast({ title: 'Market submitted for approval!' });
       
       // Reset form
       setFormData({
@@ -268,7 +268,7 @@ const CreateMarket = () => {
 
     } catch (error) {
       console.error('Error submitting market:', error);
-      showGlassToast({ title: error.message || 'Failed to submit market', icon: '❌' });
+      showGlassToast({ title: error.message || 'Failed to submit market' });
     } finally {
       setIsSubmitting(false);
     }

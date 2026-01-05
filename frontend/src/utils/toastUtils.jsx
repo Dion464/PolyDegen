@@ -15,7 +15,6 @@ export const showTransactionToast = ({
   title,
   description,
   txHash,
-  icon = '✨',
   duration = 6000,
 }) => {
   const explorerLink = txHash && explorerBase ? `${explorerBase}tx/${txHash}` : null;
@@ -28,7 +27,6 @@ export const showTransactionToast = ({
         <div className="glass-toast-card__header">
           <span className="glass-toast-card__badge" />
           <span className="glass-toast-card__title">
-            {icon ? `${icon} ` : ''}
             {title}
           </span>
           <button
@@ -64,7 +62,6 @@ export const showTransactionToast = ({
 export const showGlassToast = ({
   title,
   description,
-  icon = 'ℹ️',
   duration = 5000,
 }) => {
   toast.custom(
@@ -75,7 +72,6 @@ export const showGlassToast = ({
         <div className="glass-toast-card__header">
           <span className="glass-toast-card__badge" />
           <span className="glass-toast-card__title">
-            {icon ? `${icon} ` : ''}
             {title}
           </span>
           <button

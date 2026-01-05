@@ -49,7 +49,7 @@ const WormStyleNavbar = () => {
   const copyAddress = () => {
     if (account) {
       navigator.clipboard.writeText(account);
-      showGlassToast({ title: 'Address copied!', icon: '📋' });
+      showGlassToast({ title: 'Address copied!' });
     }
   };
 
@@ -396,11 +396,11 @@ const WormStyleNavbar = () => {
         console.error('Failed to save claimed state to database:', dbErr);
       }
       
-      showGlassToast({ title: 'Winnings claimed successfully! 🎉', icon: '✅' });
+      showGlassToast({ title: 'Winnings claimed successfully!' });
       loadNotifications();
     } catch (err) {
       console.error('Failed to claim winnings', err);
-      showGlassToast({ title: err?.message || 'Failed to claim winnings', icon: '❌' });
+      showGlassToast({ title: err?.message || 'Failed to claim winnings' });
     } finally {
       setClaimingMarket(null);
     }
@@ -625,31 +625,31 @@ const WormStyleNavbar = () => {
                   }}
                 >
                   {/* Balance display */}
-                  <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2">
-                    <span className="text-white font-medium text-[13px] sm:text-[15px]">
+                  <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5">
+                    <span className="text-white font-medium text-[11px] sm:text-[12px]">
                       {formattedBalance}
                     </span>
-                    <span className="text-white/80 text-[13px] sm:text-[15px]">CENT</span>
+                    <span className="text-white/80 text-[11px] sm:text-[12px]">CENT</span>
                     <img 
                       src="/incentivelogocircle.png" 
                       alt="CENT" 
-                      className="w-5 h-5 sm:w-6 sm:h-6"
+                      className="w-4 h-4 sm:w-[18px] sm:h-[18px]"
                     />
                   </div>
                   
                   {/* Divider */}
-                  <div className="w-[1px] h-6 bg-white/20"></div>
+                  <div className="w-[1px] h-5 bg-white/20"></div>
                   
                   {/* Profile icon with dropdown indicator */}
-                  <div className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2">
+                  <div className="flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5">
                     {/* Profile circle - just the icon, no letter */}
-                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#FFE600] flex items-center justify-center">
-                      <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#FFE600] flex items-center justify-center">
+                      <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-black" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
                       </svg>
                     </div>
                     <svg 
-                      className={`w-3 h-3 text-white/60 transition-transform ${walletDropdownOpen ? 'rotate-180' : ''}`} 
+                      className={`w-2.5 h-2.5 text-white/60 transition-transform ${walletDropdownOpen ? 'rotate-180' : ''}`} 
                       fill="none" 
                       stroke="currentColor" 
                       viewBox="0 0 24 24"

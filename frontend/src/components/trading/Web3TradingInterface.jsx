@@ -518,7 +518,6 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
             : parseFloat(tradeAmount);
           
           showGlassToast({
-            icon: '💰',
             title: `${orderType} TCENT ${result.status === 'matched' ? 'filled' : 'partially filled'}`,
             description: `${fillAmount.toFixed(4)} ${currencySymbol} @ ${centsToTCENT(avgPrice)} TCENT. ${result.status === 'matched' ? 'Settlement executing on-chain.' : 'Remaining amount stays on the book.'}`,
             duration: 5200
@@ -529,9 +528,8 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
           fetchData();
         } else {
           showGlassToast({
-            icon: '📥',
             title: 'Limit buy order placed',
-            description: `Queued at ${centsToTCENT(limitPrice)} TCENT. We’ll settle it once matched.`,
+            description: `Queued at ${centsToTCENT(limitPrice)} TCENT. We'll settle it once matched.`,
             duration: 4800
           });
           // Update immediately - no delay

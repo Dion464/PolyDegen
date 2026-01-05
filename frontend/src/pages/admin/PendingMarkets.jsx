@@ -82,7 +82,7 @@ const PendingMarkets = () => {
       }
     } catch (error) {
       console.error('Error fetching pending markets:', error);
-      showGlassToast({ title: 'Failed to fetch pending markets', icon: '❌' });
+      showGlassToast({ title: 'Failed to fetch pending markets' });
     } finally {
       setLoading(false);
     }
@@ -103,7 +103,7 @@ const PendingMarkets = () => {
 
     // If wallet is connected but not admin, redirect
     if (isConnected && account && !isWalletAdmin && !isLocalStorageAdmin) {
-      showGlassToast({ title: 'Access denied. Admin only.', icon: '🚫' });
+      showGlassToast({ title: 'Access denied. Admin only.' });
       history.push('/');
       return;
     }
@@ -116,7 +116,7 @@ const PendingMarkets = () => {
 
   const handleApprove = async (pendingMarket) => {
     if (!signer) {
-      showGlassToast({ title: 'Please connect your wallet', icon: '⚠️' });
+      showGlassToast({ title: 'Please connect your wallet' });
       return;
     }
 
@@ -137,8 +137,7 @@ const PendingMarkets = () => {
         
         if (currentChainId !== CHAIN_ID) {
           showGlassToast({ 
-            title: `Please switch to ${NETWORK_NAME} (Chain ID: ${CHAIN_ID})`, 
-            icon: '⚠️' 
+            title: `Please switch to ${NETWORK_NAME} (Chain ID: ${CHAIN_ID})`
           });
           
           // Try to switch network
@@ -214,7 +213,7 @@ const PendingMarkets = () => {
         throw new Error('Resolution time must be after end time');
       }
       
-      showGlassToast({ title: 'Creating market on-chain...', icon: '⏳' });
+      showGlassToast({ title: 'Creating market on-chain...' });
       
       // Get market creation fee from contract
       let marketCreationFee = ethers.utils.parseEther('0.01'); // Default fallback
@@ -234,7 +233,7 @@ const PendingMarkets = () => {
         { value: marketCreationFee }
       );
 
-      showGlassToast({ title: 'Transaction submitted. Waiting for confirmation...', icon: '⏳' });
+      showGlassToast({ title: 'Transaction submitted. Waiting for confirmation...' });
       const receipt = await tx.wait();
 
       // Get market ID from event
@@ -300,7 +299,7 @@ const PendingMarkets = () => {
         } catch (imgError) {
           console.error('Error saving image:', imgError);
           // Don't throw - image save failure shouldn't block approval
-          showGlassToast({ title: 'Market created but image save failed', icon: '⚠️' });
+          showGlassToast({ title: 'Market created but image save failed' });
         }
       }
 
@@ -349,7 +348,7 @@ const PendingMarkets = () => {
       const approveData = await approveResponse.json();
       console.log('✅ Pending market status updated:', approveData);
 
-      showGlassToast({ title: 'Market approved and deployed! 🎉', icon: '✅' });
+      showGlassToast({ title: 'Market approved and deployed!' });
       fetchPendingMarkets();
 
     } catch (error) {
@@ -372,7 +371,7 @@ const PendingMarkets = () => {
         errorMessage = error.message;
       }
       
-      showGlassToast({ title: errorMessage, icon: '❌' });
+      showGlassToast({ title: errorMessage });
     } finally {
       setProcessingId(null);
     }
@@ -421,14 +420,14 @@ const PendingMarkets = () => {
       const data = await response.json();
 
       if (data.success) {
-        showGlassToast({ title: 'Market rejected', icon: '✅' });
+        showGlassToast({ title: 'Market rejected' });
         fetchPendingMarkets();
       } else {
         throw new Error(data.error || 'Failed to reject market');
       }
     } catch (error) {
       console.error('Error rejecting market:', error);
-      showGlassToast({ title: error.message || 'Failed to reject market', icon: '❌' });
+      showGlassToast({ title: error.message || 'Failed to reject market' });
     } finally {
       setProcessingId(null);
     }
