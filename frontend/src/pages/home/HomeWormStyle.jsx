@@ -219,7 +219,7 @@ const HomeWormStyle = () => {
   };
   const API_BASE = resolveApiBase();
 
-  const categories = ['All', 'Politics', 'Sports', 'Crypto', 'Tech', 'KEK'];
+  const categories = ['All', 'New', 'Politics', 'Sports', 'Crypto', 'Finance', 'Geopolitics', 'Earnings', 'Tech', 'Culture', 'World', 'Economy', 'Climate & Science', 'Elections', 'Mentions'];
   
   // WebSocket for real-time market updates
   const { subscribeGlobal, onMessage } = useWebSocket();
@@ -668,40 +668,48 @@ const HomeWormStyle = () => {
         )}
 
         {/* Category Filter */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-3 sm:gap-4">
-          <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-2 scrollbar-hide w-full sm:w-auto -mx-1 px-1">
-            {categories.map((category) => (
-              <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={`px-3 sm:px-5 py-2 sm:py-2.5 rounded-full font-medium font-space-grotesk whitespace-nowrap transition-all text-[13px] sm:text-[15px] ${
-                  selectedCategory === category
-                    ? 'bg-[#222222] text-white'
-                    : 'bg-[#010101] text-white hover:bg-[#333333] border border-white/10'
-                }`}
-              >
-                {category}
-              </button>
-            ))}
+        <div className="mb-6 sm:mb-8 space-y-3">
+          {/* Categories row - scrollable */}
+          <div className="relative">
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  onClick={() => setSelectedCategory(category)}
+                  className={`px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-all text-[12px] sm:text-[13px] flex-shrink-0 ${
+                    selectedCategory === category
+                      ? 'bg-[#111111] text-white'
+                      : 'bg-[#1a1a1a] text-white/80 hover:bg-[#2a2a2a] hover:text-white'
+                  }`}
+                  style={{ fontFamily: '"Clash Grotesk", system-ui, sans-serif' }}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
           </div>
           
-          <div className="relative w-full sm:w-auto">
-            <label htmlFor="sort-markets" className="sr-only">Sort markets by</label>
-            <select 
-              id="sort-markets"
-              name="sort-markets"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              aria-label="Sort markets"
-              className="appearance-none flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 bg-[#222222] text-white rounded-full hover:bg-[#333333] transition-all whitespace-nowrap border border-white/10 cursor-pointer text-[12px] sm:text-[14px] font-medium font-space-grotesk pr-9 sm:pr-10 w-full sm:w-auto"
-            >
-              <option value="newest">Sort: Newest</option>
-              <option value="volume">Sort: Volume</option>
-              <option value="popular">Sort: Popular</option>
-            </select>
-            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
+          {/* Sort dropdown */}
+          <div className="flex justify-end">
+            <div className="relative">
+              <label htmlFor="sort-markets" className="sr-only">Sort markets by</label>
+              <select 
+                id="sort-markets"
+                name="sort-markets"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                aria-label="Sort markets"
+                className="appearance-none px-4 py-2 bg-[#1a1a1a] text-white rounded-full hover:bg-[#2a2a2a] transition-all whitespace-nowrap cursor-pointer text-[12px] sm:text-[13px] font-medium pr-8"
+                style={{ fontFamily: '"Clash Grotesk", system-ui, sans-serif' }}
+              >
+                <option value="newest">Sort: Newest</option>
+                <option value="volume">Sort: Volume</option>
+                <option value="popular">Sort: Popular</option>
+              </select>
+              <svg className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
         </div>
 
