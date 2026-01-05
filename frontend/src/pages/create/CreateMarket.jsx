@@ -59,7 +59,7 @@ const CreateMarket = () => {
     'Sports',
     'Crypto',
     'Tech',
-    'WTF'
+    'KEK'
   ];
 
   const handleImageFile = (file) => {

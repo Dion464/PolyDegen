@@ -1263,7 +1263,7 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
             <span style={{ fontFamily: homePageFont, fontWeight: 300, fontSize: '14px', lineHeight: '20px', color: '#FFFFFF' }}>
               Balance: {activeTab === 'buy'
                 ? `${parseFloat(ethBalance).toFixed(3)} TCENT`
-                : `${parseFloat(tradeSide === 'yes' ? position.yesShares : position.noShares).toFixed(3)} TCENT`}
+                : `${parseFloat(tradeSide === 'yes' ? position.yesShares : position.noShares).toFixed(3)} Shares`}
             </span>
           </div>
           
