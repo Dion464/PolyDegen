@@ -67,12 +67,6 @@ const WormStyleNavbar = () => {
     return bal.toFixed(bal < 10 ? 3 : 0);
   }, [ethBalance]);
 
-  // Estimate USD value (assuming 1 CENT = $0.0133 or similar)
-  const usdValue = useMemo(() => {
-    const bal = parseFloat(ethBalance || '0');
-    const usd = bal * 0.0133; // Example conversion rate
-    return usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-  }, [ethBalance]);
 
   const buildNotification = (market, position) => {
     if (!market || !position) return null;
@@ -620,29 +614,39 @@ const WormStyleNavbar = () => {
             {/* Connect/Wallet button */}
             <div className="relative">
               {isConnected && account ? (
-                /* Connected state - show balance and profile */
+                /* Connected state - show balance and profile with yellow gradient */
                 <button
                   onClick={handleConnectClick}
-                  className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all border border-[#2A2A2A] bg-gradient-to-r from-[#1A1A1A] to-[#0D0D0D] hover:border-[#FFE600]/30"
-                  style={{ fontFamily: '"Clash Grotesk", system-ui, sans-serif' }}
+                  className="flex items-center gap-0 rounded-full transition-all overflow-hidden"
+                  style={{ 
+                    fontFamily: '"Clash Grotesk", system-ui, sans-serif',
+                    background: 'linear-gradient(135deg, #1A1A1A 0%, #0D0D0D 50%, rgba(255, 230, 0, 0.15) 100%)',
+                    border: '1px solid #2A2A2A'
+                  }}
                 >
                   {/* Balance display */}
-                  <div className="flex items-center gap-1.5 pr-2 border-r border-[#2A2A2A]">
-                    <span className="text-white font-medium text-[12px] sm:text-[14px]">
+                  <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2">
+                    <span className="text-white font-medium text-[13px] sm:text-[15px]">
                       {formattedBalance}
                     </span>
-                    <span className="text-white/80 text-[12px] sm:text-[14px]">CENT</span>
+                    <span className="text-white/80 text-[13px] sm:text-[15px]">CENT</span>
                     <img 
                       src="/incentivelogocircle.png" 
                       alt="CENT" 
-                      className="w-4 h-4 sm:w-5 sm:h-5"
+                      className="w-5 h-5 sm:w-6 sm:h-6"
                     />
                   </div>
                   
+                  {/* Divider */}
+                  <div className="w-[1px] h-6 bg-white/20"></div>
+                  
                   {/* Profile icon with dropdown indicator */}
-                  <div className="flex items-center gap-1">
-                    <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#FFE600] flex items-center justify-center text-black font-bold text-[11px] sm:text-[13px]">
-                      {account.slice(2, 3).toUpperCase()}
+                  <div className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2">
+                    {/* Profile circle - just the icon, no letter */}
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#FFE600] flex items-center justify-center">
+                      <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                      </svg>
                     </div>
                     <svg 
                       className={`w-3 h-3 text-white/60 transition-transform ${walletDropdownOpen ? 'rotate-180' : ''}`} 
@@ -693,7 +697,6 @@ const WormStyleNavbar = () => {
                             <p className="text-white text-[20px] font-semibold">
                               {parseFloat(ethBalance || '0').toLocaleString('en-US', { maximumFractionDigits: 3 })} CENT
                             </p>
-                            <p className="text-white/50 text-[14px]">{usdValue}</p>
                           </div>
                         </div>
                       </div>
@@ -703,11 +706,11 @@ const WormStyleNavbar = () => {
                         <p className="text-white/50 text-[13px] mb-3">Connected Wallet</p>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            {/* Avatar placeholder */}
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FFE600] to-[#FF9500] flex items-center justify-center overflow-hidden">
-                              <span className="text-black font-bold text-[16px]">
-                                {account.slice(2, 3).toUpperCase()}
-                              </span>
+                            {/* Avatar - profile icon */}
+                            <div className="w-10 h-10 rounded-full bg-[#FFE600] flex items-center justify-center">
+                              <svg className="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                              </svg>
                             </div>
                             <p className="text-white text-[15px] font-medium">
                               {account.slice(0, 6)}...{account.slice(-4)}

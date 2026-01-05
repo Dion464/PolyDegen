@@ -43,7 +43,7 @@ function App() {
                   <AppRoutes />
                 </main>
                 <Toaster
-                position="top-right"
+                position="bottom-left"
                 toastOptions={{
                   duration: 4500,
                   className: 'glass-toast',
