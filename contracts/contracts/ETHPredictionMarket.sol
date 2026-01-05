@@ -30,8 +30,10 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         uint256 noAskPrice;  // Best ask for NO in basis points
         // Pari-mutuel pool tracking
         uint256 totalPool; // Total ETH pooled from all purchases (for pari-mutuel payouts)
-        uint256 yesPool; // Total ETH invested in YES side (after platform fees)
-        uint256 noPool;  // Total ETH invested in NO side (after platform fees)
+        uint256 yesPool; // Current ETH in YES pool (decreases when shares sold)
+        uint256 noPool;  // Current ETH in NO pool (decreases when shares sold)
+        uint256 totalYesInvested; // Total TCENT ever invested in YES side (for payout calculation)
+        uint256 totalNoInvested;  // Total TCENT ever invested in NO side (for payout calculation)
     }
 
     struct Position {
@@ -254,7 +256,9 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             // Pari-mutuel pool starts at 0
             totalPool: 0,
             yesPool: 0,
-            noPool: 0
+            noPool: 0,
+            totalYesInvested: 0,
+            totalNoInvested: 0
         });
 
         activeMarketIds.push(marketId);
@@ -342,11 +346,13 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         market.totalVolume += msg.value;
         // Track actual ETH deposited for pari-mutuel payouts (investment amount minus platform fee)
         market.totalPool += investmentAmount;
-        // Track pool per side
+        // Track pool per side (current pool)
         if (_isYes) {
             market.yesPool += investmentAmount;
+            market.totalYesInvested += investmentAmount; // Track total TCENT invested
         } else {
             market.noPool += investmentAmount;
+            market.totalNoInvested += investmentAmount; // Track total TCENT invested
         }
 
         // Update user position
@@ -378,6 +384,16 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         }));
 
         emit SharesPurchased(_marketId, msg.sender, _isYes, shares, msg.value, _isYes ? finalYesPrice : finalNoPrice);
+    }
+
+    // Helper function to decrease pool when seller withdraws
+    function _decreasePool(uint256 _marketId, bool _isYes, uint256 _amount) internal {
+        Market storage m = markets[_marketId];
+        if (_isYes) {
+            m.yesPool = m.yesPool >= _amount ? m.yesPool - _amount : 0;
+        } else {
+            m.noPool = m.noPool >= _amount ? m.noPool - _amount : 0;
+        }
     }
 
     // ============ USER-TO-USER SELL ORDER SYSTEM ============
@@ -445,13 +461,30 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                     }
                     
                     Position storage buyerPos = positions[sellOrder.marketId][limitOrder.trader];
+                    Position storage sellerPos = positions[sellOrder.marketId][sellOrder.seller];
                     if (sellOrder.isYes) {
                         buyerPos.yesShares += sharesToTrade;
+                        // Update buyer's investment (proportional to shares bought)
+                        uint256 sellerTotalShares = sellerPos.yesShares + (sharesToTrade); // shares before sale
+                        if (sellerTotalShares > 0) {
+                            uint256 investmentToTransfer = (sellerPos.yesInvested * sharesToTrade) / sellerTotalShares;
+                            sellerPos.yesInvested -= investmentToTransfer;
+                            buyerPos.yesInvested += investmentToTransfer;
+                        }
                     } else {
                         buyerPos.noShares += sharesToTrade;
+                        // Update buyer's investment (proportional to shares bought)
+                        uint256 sellerTotalShares = sellerPos.noShares + (sharesToTrade); // shares before sale
+                        if (sellerTotalShares > 0) {
+                            uint256 investmentToTransfer = (sellerPos.noInvested * sharesToTrade) / sellerTotalShares;
+                            sellerPos.noInvested -= investmentToTransfer;
+                            buyerPos.noInvested += investmentToTransfer;
+                        }
                     }
                     buyerPos.totalInvested += totalCost;
                     
+                    // Decrease pool when seller withdraws money
+                    _decreasePool(sellOrder.marketId, sellOrder.isYes, sellerPayout);
                     payable(sellOrder.seller).transfer(sellerPayout);
                     
                     // Refund excess ETH from limit order if any
@@ -574,14 +607,32 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         // Mark order as filled
         order.filled = true;
         
-        // Transfer shares to buyer
+                    // Transfer shares to buyer
         Position storage buyerPosition = positions[order.marketId][msg.sender];
+        Position storage sellerPosition = positions[order.marketId][order.seller];
         if (order.isYes) {
             buyerPosition.yesShares += order.shares;
+            // Transfer investment proportionally
+            uint256 sellerTotalShares = sellerPosition.yesShares + order.shares; // shares before sale
+            if (sellerTotalShares > 0) {
+                uint256 investmentToTransfer = (sellerPosition.yesInvested * order.shares) / sellerTotalShares;
+                sellerPosition.yesInvested -= investmentToTransfer;
+                buyerPosition.yesInvested += investmentToTransfer;
+            }
         } else {
             buyerPosition.noShares += order.shares;
+            // Transfer investment proportionally
+            uint256 sellerTotalShares = sellerPosition.noShares + order.shares; // shares before sale
+            if (sellerTotalShares > 0) {
+                uint256 investmentToTransfer = (sellerPosition.noInvested * order.shares) / sellerTotalShares;
+                sellerPosition.noInvested -= investmentToTransfer;
+                buyerPosition.noInvested += investmentToTransfer;
+            }
         }
         buyerPosition.totalInvested += totalCost;
+        
+        // Decrease pool when seller withdraws money
+        _decreasePool(order.marketId, order.isYes, sellerPayout);
         
         // Note: We don't reduce market.totalYesShares/totalNoShares because
         // shares are just transferred between users, not created/destroyed
@@ -997,17 +1048,15 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             uint256 losingPoolShare = 0;
             
             if (market.outcome == 1 && position.yesShares > 0) {
-                // YES won - calculate investment based on shares, then add percentage of losing pool
-                require(market.totalYesShares > 0, "No winning shares");
+                // YES won - use actual TCENT investment, split losing pool by TCENT percentage
+                require(market.totalYesInvested > 0, "No winning investment");
                 
-                // Calculate user's investment based on their share percentage of YES pool
-                if (market.totalYesShares > 0 && market.yesPool > 0) {
-                    userInvestment = (market.yesPool * position.yesShares) / market.totalYesShares;
-                }
+                // User's actual TCENT investment
+                userInvestment = position.yesInvested;
                 
-                // Calculate percentage share of losing pool (NO pool)
-                if (market.totalYesShares > 0 && market.noPool > 0) {
-                    losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
+                // Calculate percentage of losing pool based on TCENT investment
+                if (market.totalYesInvested > 0 && market.noPool > 0) {
+                    losingPoolShare = (market.noPool * position.yesInvested) / market.totalYesInvested;
                 }
                 
                 grossPayout = userInvestment + losingPoolShare;
@@ -1016,17 +1065,15 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                 position.noShares = 0;
                 position.noInvested = 0;
             } else if (market.outcome == 2 && position.noShares > 0) {
-                // NO won - calculate investment based on shares, then add percentage of losing pool
-                require(market.totalNoShares > 0, "No winning shares");
+                // NO won - use actual TCENT investment, split losing pool by TCENT percentage
+                require(market.totalNoInvested > 0, "No winning investment");
                 
-                // Calculate user's investment based on their share percentage of NO pool
-                if (market.totalNoShares > 0 && market.noPool > 0) {
-                    userInvestment = (market.noPool * position.noShares) / market.totalNoShares;
-                }
+                // User's actual TCENT investment
+                userInvestment = position.noInvested;
                 
-                // Calculate percentage share of losing pool (YES pool)
-                if (market.totalNoShares > 0 && market.yesPool > 0) {
-                    losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
+                // Calculate percentage of losing pool based on TCENT investment
+                if (market.totalNoInvested > 0 && market.yesPool > 0) {
+                    losingPoolShare = (market.yesPool * position.noInvested) / market.totalNoInvested;
                 }
                 
                 grossPayout = userInvestment + losingPoolShare;
@@ -1098,17 +1145,15 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         uint256 losingPoolShare = 0;
         
         if (market.outcome == 1 && position.yesShares > 0) {
-            // YES won - calculate investment based on shares, then add percentage of losing pool
-            require(market.totalYesShares > 0, "No winning shares");
+            // YES won - use actual TCENT investment, split losing pool by TCENT percentage
+            require(market.totalYesInvested > 0, "No winning investment");
             
-            // Calculate user's investment based on their share percentage of YES pool
-            if (market.totalYesShares > 0 && market.yesPool > 0) {
-                userInvestment = (market.yesPool * position.yesShares) / market.totalYesShares;
-            }
+            // User's actual TCENT investment
+            userInvestment = position.yesInvested;
             
-            // Calculate percentage share of losing pool (NO pool)
-            if (market.totalYesShares > 0 && market.noPool > 0) {
-                losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
+            // Calculate percentage of losing pool based on TCENT investment
+            if (market.totalYesInvested > 0 && market.noPool > 0) {
+                losingPoolShare = (market.noPool * position.yesInvested) / market.totalYesInvested;
             }
             
             grossPayout = userInvestment + losingPoolShare;
@@ -1118,17 +1163,15 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             position.noShares = 0;
             position.noInvested = 0;
         } else if (market.outcome == 2 && position.noShares > 0) {
-            // NO won - calculate investment based on shares, then add percentage of losing pool
-            require(market.totalNoShares > 0, "No winning shares");
+            // NO won - use actual TCENT investment, split losing pool by TCENT percentage
+            require(market.totalNoInvested > 0, "No winning investment");
             
-            // Calculate user's investment based on their share percentage of NO pool
-            if (market.totalNoShares > 0 && market.noPool > 0) {
-                userInvestment = (market.noPool * position.noShares) / market.totalNoShares;
-            }
+            // User's actual TCENT investment
+            userInvestment = position.noInvested;
             
-            // Calculate percentage share of losing pool (YES pool)
-            if (market.totalNoShares > 0 && market.yesPool > 0) {
-                losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
+            // Calculate percentage of losing pool based on TCENT investment
+            if (market.totalNoInvested > 0 && market.yesPool > 0) {
+                losingPoolShare = (market.yesPool * position.noInvested) / market.totalNoInvested;
             }
             
             grossPayout = userInvestment + losingPoolShare;
@@ -1262,14 +1305,30 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                     
                     // Transfer shares to limit order buyer
                     Position storage buyerPosition = positions[limitOrder.marketId][limitOrder.trader];
+                    Position storage sellerPosition = positions[limitOrder.marketId][sellOrder.seller];
                     if (sellOrder.isYes) {
                         buyerPosition.yesShares += sharesToTrade;
+                        // Transfer investment proportionally
+                        uint256 sellerTotalShares = sellerPosition.yesShares + sharesToTrade; // shares before sale
+                        if (sellerTotalShares > 0) {
+                            uint256 investmentToTransfer = (sellerPosition.yesInvested * sharesToTrade) / sellerTotalShares;
+                            sellerPosition.yesInvested -= investmentToTransfer;
+                            buyerPosition.yesInvested += investmentToTransfer;
+                        }
                     } else {
                         buyerPosition.noShares += sharesToTrade;
+                        // Transfer investment proportionally
+                        uint256 sellerTotalShares = sellerPosition.noShares + sharesToTrade; // shares before sale
+                        if (sellerTotalShares > 0) {
+                            uint256 investmentToTransfer = (sellerPosition.noInvested * sharesToTrade) / sellerTotalShares;
+                            sellerPosition.noInvested -= investmentToTransfer;
+                            buyerPosition.noInvested += investmentToTransfer;
+                        }
                     }
                     buyerPosition.totalInvested += totalCost;
                     
-                    // Pay seller
+                    // Decrease pool when seller withdraws money
+                    _decreasePool(limitOrder.marketId, sellOrder.isYes, sellerPayout);
                     payable(sellOrder.seller).transfer(sellerPayout);
                     
                     // Refund excess ETH from limit order if any

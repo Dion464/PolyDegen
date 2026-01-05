@@ -15,7 +15,8 @@ const WormStyleNavbar = () => {
     getUserMarkets,
     getMarketData,
     getUserPosition,
-    claimWinnings
+    claimWinnings,
+    ethBalance
   } = useWeb3();
 
   const [notifications, setNotifications] = useState([]);
@@ -25,6 +26,7 @@ const WormStyleNavbar = () => {
   const [claimingMarket, setClaimingMarket] = useState(null);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [walletDropdownOpen, setWalletDropdownOpen] = useState(false);
 
   const handleCreateClick = () => {
     history.push('/create');
@@ -32,11 +34,45 @@ const WormStyleNavbar = () => {
 
   const handleConnectClick = () => {
     if (isConnected && account) {
-      disconnectWallet();
+      setWalletDropdownOpen(!walletDropdownOpen);
+      setNotificationsOpen(false); // Close notifications when opening wallet dropdown
     } else {
       connectWallet();
     }
   };
+
+  const handleDisconnect = () => {
+    setWalletDropdownOpen(false);
+    disconnectWallet();
+  };
+
+  const copyAddress = () => {
+    if (account) {
+      navigator.clipboard.writeText(account);
+      showGlassToast({ title: 'Address copied!', icon: '📋' });
+    }
+  };
+
+  const openExplorer = () => {
+    if (account) {
+      window.open(`https://explorer.incentiv.io/address/${account}`, '_blank');
+    }
+  };
+
+  // Format balance for display
+  const formattedBalance = useMemo(() => {
+    const bal = parseFloat(ethBalance || '0');
+    if (bal >= 1000000) return `${(bal / 1000000).toFixed(1)}M`;
+    if (bal >= 1000) return `${(bal / 1000).toFixed(1)}K`;
+    return bal.toFixed(bal < 10 ? 3 : 0);
+  }, [ethBalance]);
+
+  // Estimate USD value (assuming 1 CENT = $0.0133 or similar)
+  const usdValue = useMemo(() => {
+    const bal = parseFloat(ethBalance || '0');
+    const usd = bal * 0.0133; // Example conversion rate
+    return usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  }, [ethBalance]);
 
   const buildNotification = (market, position) => {
     if (!market || !position) return null;
@@ -270,16 +306,17 @@ const WormStyleNavbar = () => {
     return () => clearInterval(interval);
   }, [isConnected, account, loadNotifications]);
 
-  // Close notifications/menu on escape key and prevent body scroll on mobile
+  // Close notifications/menu/wallet dropdown on escape key and prevent body scroll on mobile
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === 'Escape') {
         if (notificationsOpen) setNotificationsOpen(false);
         if (mobileMenuOpen) setMobileMenuOpen(false);
+        if (walletDropdownOpen) setWalletDropdownOpen(false);
       }
     };
 
-    const isOpen = notificationsOpen || mobileMenuOpen;
+    const isOpen = notificationsOpen || mobileMenuOpen || walletDropdownOpen;
     
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
@@ -297,7 +334,7 @@ const WormStyleNavbar = () => {
         document.removeEventListener('keydown', handleEscape);
       };
     }
-  }, [notificationsOpen, mobileMenuOpen]);
+  }, [notificationsOpen, mobileMenuOpen, walletDropdownOpen]);
 
   // Count only unclaimed notifications for the badge
   const notificationCount = notifications.filter(n => {
@@ -472,7 +509,10 @@ const WormStyleNavbar = () => {
             {/* Notifications icon, compact */}
             <div className="relative">
               <button
-                onClick={() => setNotificationsOpen((prev) => !prev)}
+                onClick={() => {
+                  setNotificationsOpen((prev) => !prev);
+                  setWalletDropdownOpen(false); // Close wallet dropdown when opening notifications
+                }}
                 className="p-1.5 sm:px-2.5 sm:py-2 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center relative"
               >
                 <span className="sr-only">Notifications</span>
@@ -577,23 +617,141 @@ const WormStyleNavbar = () => {
               )}
             </div>
 
-            {/* Connect button */}
-            <button
-              onClick={handleConnectClick}
-              disabled={isConnecting}
-              className="px-3 sm:px-5 py-1.5 sm:py-2 bg-[#FFE600] hover:bg-[#FFD700] text-black rounded-full transition-all font-space-grotesk font-semibold text-[11px] sm:text-sm shadow-[0_0_0_1px_rgba(0,0,0,0.4)] disabled:opacity-60 whitespace-nowrap"
-            >
-              {isConnecting ? (
-                <span className="text-[10px] sm:text-sm">...</span>
-              ) : isConnected && account ? (
-                <>
-                  <span className="hidden sm:inline">{account.slice(0, 6)}...{account.slice(-4)}</span>
-                  <span className="sm:hidden">{account.slice(0, 3)}..{account.slice(-2)}</span>
-                </>
+            {/* Connect/Wallet button */}
+            <div className="relative">
+              {isConnected && account ? (
+                /* Connected state - show balance and profile */
+                <button
+                  onClick={handleConnectClick}
+                  className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all border border-[#2A2A2A] bg-gradient-to-r from-[#1A1A1A] to-[#0D0D0D] hover:border-[#FFE600]/30"
+                  style={{ fontFamily: '"Clash Grotesk", system-ui, sans-serif' }}
+                >
+                  {/* Balance display */}
+                  <div className="flex items-center gap-1.5 pr-2 border-r border-[#2A2A2A]">
+                    <span className="text-white font-medium text-[12px] sm:text-[14px]">
+                      {formattedBalance}
+                    </span>
+                    <span className="text-white/80 text-[12px] sm:text-[14px]">CENT</span>
+                    <img 
+                      src="/incentivelogocircle.png" 
+                      alt="CENT" 
+                      className="w-4 h-4 sm:w-5 sm:h-5"
+                    />
+                  </div>
+                  
+                  {/* Profile icon with dropdown indicator */}
+                  <div className="flex items-center gap-1">
+                    <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#FFE600] flex items-center justify-center text-black font-bold text-[11px] sm:text-[13px]">
+                      {account.slice(2, 3).toUpperCase()}
+                    </div>
+                    <svg 
+                      className={`w-3 h-3 text-white/60 transition-transform ${walletDropdownOpen ? 'rotate-180' : ''}`} 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </button>
               ) : (
-                'Connect'
+                /* Not connected state */
+                <button
+                  onClick={handleConnectClick}
+                  disabled={isConnecting}
+                  className="px-3 sm:px-5 py-1.5 sm:py-2 bg-[#FFE600] hover:bg-[#FFD700] text-black rounded-full transition-all font-space-grotesk font-semibold text-[11px] sm:text-sm shadow-[0_0_0_1px_rgba(0,0,0,0.4)] disabled:opacity-60 whitespace-nowrap"
+                >
+                  {isConnecting ? '...' : 'Connect'}
+                </button>
               )}
-            </button>
+
+              {/* Wallet Dropdown */}
+              {walletDropdownOpen && isConnected && account && (
+                <>
+                  {/* Backdrop */}
+                  <div 
+                    className="fixed inset-0 z-40"
+                    onClick={() => setWalletDropdownOpen(false)}
+                  />
+                  
+                  {/* Dropdown panel */}
+                  <div 
+                    className="absolute right-0 top-full mt-3 w-[280px] sm:w-[320px] rounded-[20px] border border-[#2A2A2A] bg-[#0D0D0D] shadow-2xl z-50 overflow-hidden"
+                    style={{ fontFamily: '"Clash Grotesk", system-ui, sans-serif' }}
+                  >
+                    <div className="p-5 space-y-5">
+                      {/* Balance Section */}
+                      <div>
+                        <p className="text-white/50 text-[13px] mb-2">Balance</p>
+                        <div className="flex items-center gap-3">
+                          <img 
+                            src="/incentivelogocircle.png" 
+                            alt="CENT" 
+                            className="w-8 h-8"
+                          />
+                          <div>
+                            <p className="text-white text-[20px] font-semibold">
+                              {parseFloat(ethBalance || '0').toLocaleString('en-US', { maximumFractionDigits: 3 })} CENT
+                            </p>
+                            <p className="text-white/50 text-[14px]">{usdValue}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Connected Wallet Section */}
+                      <div>
+                        <p className="text-white/50 text-[13px] mb-3">Connected Wallet</p>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            {/* Avatar placeholder */}
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FFE600] to-[#FF9500] flex items-center justify-center overflow-hidden">
+                              <span className="text-black font-bold text-[16px]">
+                                {account.slice(2, 3).toUpperCase()}
+                              </span>
+                            </div>
+                            <p className="text-white text-[15px] font-medium">
+                              {account.slice(0, 6)}...{account.slice(-4)}
+                            </p>
+                          </div>
+                          
+                          {/* Action buttons */}
+                          <div className="flex items-center gap-2">
+                            {/* Copy button */}
+                            <button
+                              onClick={copyAddress}
+                              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                              title="Copy address"
+                            >
+                              <svg className="w-5 h-5 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                            </button>
+                            {/* External link button */}
+                            <button
+                              onClick={openExplorer}
+                              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                              title="View on explorer"
+                            >
+                              <svg className="w-5 h-5 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Disconnect Button */}
+                      <button
+                        onClick={handleDisconnect}
+                        className="w-full py-3 rounded-full border border-[#FFE600] text-[#FFE600] font-semibold text-[15px] hover:bg-[#FFE600]/10 transition-colors"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Mobile menu icon */}
             <button 
