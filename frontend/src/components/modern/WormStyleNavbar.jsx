@@ -628,7 +628,7 @@ const WormStyleNavbar = () => {
                 >
                   {/* Balance display */}
                   <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5">
-                    <span className="text-white font-medium text-[14px] sm:text-[12px]">
+                    <span className="text-white font-medium text-[11px] sm:text-[12px]">
                       {formattedBalance}
                     </span>
                     <span className="text-white/80 text-[11px] sm:text-[12px]">TCENT</span>
@@ -688,15 +688,15 @@ const WormStyleNavbar = () => {
                     <div className="p-5 space-y-5">
                       {/* Balance Section */}
                       <div>
-                        <p className="text-white/50 text-[13px] mb-2">Balance</p>
+                        <p className="text-[14px] font-medium mb-2" style={{ color: 'rgba(161, 161, 161, 1)' }}>Balance</p>
                         <div className="flex items-center gap-3">
                           <img 
                             src="/incentivelogocircle.png" 
-                            alt="CENT" 
+                            alt="TCENT" 
                             className="w-8 h-8"
                           />
                           <div>
-                            <p className="text-white text-[20px] font-semibold">
+                            <p className="text-white text-[16px] font-medium">
                               {parseFloat(ethBalance || '0').toLocaleString('en-US', { maximumFractionDigits: 3 })} TCENT
                             </p>
                           </div>
@@ -705,39 +705,45 @@ const WormStyleNavbar = () => {
 
                       {/* Connected Wallet Section */}
                       <div>
-                        <p className="text-white/50 text-[13px] mb-3">Connected Wallet</p>
+                        <p className="text-[14px] font-medium mb-3" style={{ color: 'rgba(124, 124, 124, 1)' }}>Connected Wallet</p>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             {/* Avatar - profile icon */}
-                            <div className="w-10 h-10 rounded-full bg-[#FFE600] flex items-center justify-center">
-                              <svg className="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24">
+                            <div className="w-12 h-12 rounded-full bg-[#FFE600] flex items-center justify-center">
+                              <svg className="w-6 h-6 text-black" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
                               </svg>
                             </div>
-                            <p className="text-white text-[15px] font-medium">
+                            <p className="text-white text-[18px] font-medium">
                               {account.slice(0, 6)}...{account.slice(-4)}
                             </p>
                           </div>
                           
-                          {/* Action buttons */}
-                          <div className="flex items-center gap-2">
+                          {/* Action buttons with Copied tooltip */}
+                          <div className="flex items-center gap-1 relative">
+                            {/* Copied tooltip */}
+                            {copied && (
+                              <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-[#1A1A1A] text-white text-[13px] font-medium rounded-lg whitespace-nowrap">
+                                Copied!
+                              </div>
+                            )}
                             {/* Copy button */}
                             <button
                               onClick={copyAddress}
-                              className="p-2.5 rounded-xl bg-[#1A1A1A] hover:bg-[#252525] transition-colors"
+                              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
                               title="Copy address"
                             >
-                              <svg className="w-5 h-5 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                               </svg>
                             </button>
                             {/* External link button */}
                             <button
                               onClick={openExplorer}
-                              className="p-2.5 rounded-xl bg-[#1A1A1A] hover:bg-[#252525] transition-colors"
+                              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
                               title="View on explorer"
                             >
-                              <svg className="w-5 h-5 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                               </svg>
                             </button>
@@ -748,7 +754,8 @@ const WormStyleNavbar = () => {
                       {/* Disconnect Button - 300px width, 48px height, 10px radius, 1px border */}
                       <button
                         onClick={handleDisconnect}
-                        className="w-full py-3 rounded-full border border-[#FFE600] text-[#FFE600] font-semibold text-[15px] hover:bg-[#FFE600]/10 transition-colors"
+                        className="w-full h-[48px] rounded-[10px] border text-[16px] font-normal hover:bg-[#FFE600]/10 transition-colors"
+                        style={{ borderColor: 'rgba(255, 230, 0, 1)', color: 'rgba(255, 230, 0, 1)' }}
                       >
                         Disconnect
                       </button>
@@ -810,7 +817,7 @@ const WormStyleNavbar = () => {
                 Activity
               </button>
 
-              {/* Create Market Link  */} 
+              {/* Create Market Link */}
               <button
                 onClick={() => {
                   history.push('/create');
