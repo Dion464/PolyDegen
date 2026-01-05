@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 import WormStyleNavbar from '../../components/modern/WormStyleNavbar';
 import { useWeb3 } from '../../hooks/useWeb3';
 import toast from 'react-hot-toast';
-import { showGlassToast } from '../../utils/toastUtils';
+import { showGlassToast, showTransactionToast } from '../../utils/toastUtils';
 import { CONTRACT_ADDRESS } from '../../contracts/eth-config';
 
 const CreateMarket = () => {
@@ -22,10 +22,9 @@ const CreateMarket = () => {
     endTime: '23:59',
     resolutionDate: '',
     resolutionTime: '23:59',
-    rules: []
+    resolvesYes: '',
+    resolvesNo: ''
   });
-
-  const [currentRule, setCurrentRule] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [imagePreview, setImagePreview] = useState('');
   const fileInputRef = useRef(null);
@@ -110,23 +109,6 @@ const CreateMarket = () => {
     setImagePreview(value);
   };
 
-  const handleAddRule = () => {
-    if (currentRule.trim()) {
-      setFormData(prev => ({
-        ...prev,
-        rules: [...prev.rules, currentRule.trim()]
-      }));
-      setCurrentRule('');
-    }
-  };
-
-  const handleRemoveRule = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      rules: prev.rules.filter((_, i) => i !== index)
-    }));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -189,7 +171,11 @@ const CreateMarket = () => {
       showGlassToast({ title: 'Waiting for fee payment confirmation...' });
       await feeTx.wait();
       
-      showGlassToast({ title: 'Submission fee paid!' });
+      showTransactionToast({ 
+        title: 'Submission fee paid!', 
+        txHash: feeTx.hash,
+        duration: 8000
+      });
     } catch (feeError) {
       console.error('Fee payment failed:', feeError);
       showGlassToast({ title: `Fee payment failed: ${feeError.message || 'Transaction rejected'}. Market submission cancelled.` });
@@ -216,7 +202,10 @@ const CreateMarket = () => {
           imageUrl: formData.imageUrl.trim() || null,
           endTime: endTime.toISOString(),
           resolutionTime: resolutionTime.toISOString(),
-          rules: formData.rules.length > 0 ? formData.rules : null,
+          rules: [
+            formData.resolvesYes.trim() ? `Resolves YES if ${formData.resolvesYes.trim()}` : null,
+            formData.resolvesNo.trim() ? `Resolves NO if ${formData.resolvesNo.trim()}` : null
+          ].filter(Boolean),
           creator: account.toLowerCase(),
           feeTxHash,
           feeAmountWei
@@ -257,7 +246,8 @@ const CreateMarket = () => {
         endTime: '23:59',
         resolutionDate: '',
         resolutionTime: '23:59',
-        rules: []
+        resolvesYes: '',
+        resolvesNo: ''
       });
       setImagePreview('');
 
@@ -471,60 +461,46 @@ const CreateMarket = () => {
               </div>
             </div>
 
-            {/* Rules */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Market Rules (optional)
+            {/* Resolution Rules */}
+            <div className="space-y-4">
+              <label className="block text-sm font-medium text-gray-300">
+                Resolution Rules (optional)
               </label>
-              <div className="space-y-2">
-                {formData.rules.map((rule, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <div className="flex-1 px-4 py-2 rounded-[12px] glass-card text-white text-sm"
-                      style={{
-                        background: 'linear-gradient(180deg, rgba(32,32,32,0.92) 0%, rgba(14,14,14,0.68) 100%)',
-                        border: '1px solid rgba(255,255,255,0.05)'
-                      }}>
-                      {index + 1}. {rule}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveRule(index)}
-                      className="px-3 py-2 rounded-[8px] text-red-400 hover:bg-red-500/10"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={currentRule}
-                    onChange={(e) => setCurrentRule(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddRule();
-                      }
-                    }}
-                    placeholder="Add a rule..."
-                    className="flex-1 px-4 py-3 rounded-[12px] glass-card text-white placeholder-gray-500"
-                    style={{
-                      background: 'linear-gradient(180deg, rgba(32,32,32,0.92) 0%, rgba(14,14,14,0.68) 100%)',
-                      border: '1px solid rgba(255,255,255,0.05)'
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddRule}
-                    className="px-6 py-3 rounded-[12px] text-white"
-                    style={{
-                      background: 'linear-gradient(180deg, rgba(15,15,15,0.92) 0%, rgba(8,8,8,0.78) 100%)',
-                      border: '1px solid #FFE600'
-                    }}
-                  >
-                    Add
-                  </button>
+              
+              {/* Resolves YES if */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[#22C55E] font-medium text-sm">Resolves YES if</span>
                 </div>
+                <input
+                  type="text"
+                  value={formData.resolvesYes}
+                  onChange={(e) => setFormData({ ...formData, resolvesYes: e.target.value })}
+                  placeholder="e.g., Bitcoin price exceeds $100,000 on any major exchange"
+                  className="w-full px-4 py-3 rounded-[12px] glass-card text-white placeholder-gray-500"
+                  style={{
+                    background: 'linear-gradient(180deg, rgba(32,32,32,0.92) 0%, rgba(14,14,14,0.68) 100%)',
+                    border: '1px solid rgba(34, 197, 94, 0.3)'
+                  }}
+                />
+              </div>
+
+              {/* Resolves NO if */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[#EF4444] font-medium text-sm">Resolves NO if</span>
+                </div>
+                <input
+                  type="text"
+                  value={formData.resolvesNo}
+                  onChange={(e) => setFormData({ ...formData, resolvesNo: e.target.value })}
+                  placeholder="e.g., Bitcoin price stays below $100,000 by the end date"
+                  className="w-full px-4 py-3 rounded-[12px] glass-card text-white placeholder-gray-500"
+                  style={{
+                    background: 'linear-gradient(180deg, rgba(32,32,32,0.92) 0%, rgba(14,14,14,0.68) 100%)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)'
+                  }}
+                />
               </div>
             </div>
 
