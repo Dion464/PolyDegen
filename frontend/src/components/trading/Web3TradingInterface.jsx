@@ -1307,11 +1307,11 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
             <span style={{ 
               fontFamily: homePageFont, 
               fontWeight: 400, 
-              fontSize: '12px', 
+              fontSize: '13px', 
               color: '#8B8B8B',
-              background: 'rgba(255,255,255,0.06)',
-              padding: '2px 8px',
-              borderRadius: '4px'
+              background: 'rgba(255,255,255,0.08)',
+              padding: '4px 12px',
+              borderRadius: '6px'
             }}>
               {activeTab === 'buy'
                 ? parseFloat(ethBalance).toFixed(2)
@@ -1320,23 +1320,15 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
           </div>
           
           <div 
-            className="glass-card flex items-center rounded-[12px]" 
+            className="flex items-center rounded-[12px]" 
             style={{
               width: '100%',
               height: '68px',
               padding: '0 20px',
-              background: 'linear-gradient(180deg, rgba(28,28,28,0.95) 0%, rgba(18,18,18,0.9) 100%)',
-              border: '1px solid rgba(255,255,255,0.06)',
-              backdropFilter: 'blur(32px)'
+              background: 'linear-gradient(180deg, rgba(32,32,32,0.92) 0%, rgba(14,14,14,0.68) 100%)',
+              border: '1px solid rgba(255,255,255,0.05)'
             }}
           >
-            <span style={{ 
-              fontFamily: homePageFont, 
-              fontWeight: 500, 
-              fontSize: '28px', 
-              color: '#4A4A4A',
-              marginRight: '8px'
-            }}>$</span>
             <input
               type="text"
               value={tradeAmount || '0'}
