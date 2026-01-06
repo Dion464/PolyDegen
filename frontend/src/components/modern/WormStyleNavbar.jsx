@@ -416,7 +416,7 @@ const WormStyleNavbar = () => {
           <div className="flex items-center gap-3 sm:gap-6 flex-shrink-0">
             <button
               onClick={() => history.push('/')}
-              className="flex items-center gap-2 hover:opacity-90 transition-opacity"
+              className="flex items-center gap-1.5 sm:gap-2 hover:opacity-90 transition-opacity"
               aria-label="Go to homepage"
             >
               <img 
@@ -424,9 +424,9 @@ const WormStyleNavbar = () => {
                 alt="PolyDegen Logo" 
                 width={26} 
                 height={34}
-                className="flex-shrink-0"
+                className="flex-shrink-0 w-5 h-7 sm:w-[26px] sm:h-[34px]"
               />
-              <span className=" font-medium text-[24.5px]" style={{ fontFamily: '"Clash Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+              <span className="hidden sm:inline font-medium text-[20px] sm:text-[24.5px]" style={{ fontFamily: '"Clash Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
                 PolyDegen
               </span>
             </button>

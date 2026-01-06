@@ -69,7 +69,7 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
   } = web3Context;
   
   const currencySymbol = getCurrencySymbol(chainId);
-  const homePageFont = 'gilroy, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  const homePageFont = '"Clash Grotesk", "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   const getOutcomeButtonStyle = (isActive, width) => ({
     width,
     height: '40px',
@@ -1075,8 +1075,8 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
   }
 
   return (
-    <div className="glass-card rounded-[12px] sm:rounded-[16px] backdrop-blur-[32px] relative w-full px-3 sm:px-4" style={{ background: 'transparent', minHeight: '540px', paddingTop: '17px', paddingBottom: '17px' }}>
-      <div className="relative w-full min-h-[480px]">
+    <div className="glass-card rounded-[12px] sm:rounded-[16px] backdrop-blur-[32px] relative w-full px-3 sm:px-4" style={{ background: 'transparent', minHeight: orderType === 'limit' ? '620px' : '520px', paddingTop: '17px', paddingBottom: '17px' }}>
+      <div className="relative w-full" style={{ minHeight: orderType === 'limit' ? '580px' : '480px' }}>
         
         {/* Buy/Sell + 2x Badge - Row at y:0 */}
         <div className="absolute flex items-center justify-between w-full" style={{ left: 0, top: 0, height: '40px' }}>
@@ -1262,119 +1262,111 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
           </>
         )}
 
-        {/* Percentage Buttons - Quick select */}
-        <div className="absolute flex items-center justify-between gap-2" style={{ 
+        {/* Percentage Buttons - Quick select (Market order only) */}
+        {orderType === 'market' && (
+          <div className="absolute flex items-center justify-between gap-3" style={{ 
+            left: 0, 
+            top: '193px', 
+            width: '100%'
+          }}>
+            {[10, 25, 50, 75, 100].map((percent) => {
+              const balance = activeTab === 'buy' 
+                ? parseFloat(ethBalance) 
+                : parseFloat(tradeSide === 'yes' ? position.yesShares : position.noShares);
+              const calculatedAmount = (balance * percent / 100).toFixed(4);
+              const isActive = tradeAmount === calculatedAmount;
+              
+              return (
+                <button
+                  key={percent}
+                  onClick={() => setTradeAmount(calculatedAmount)}
+                  className={`flex-1 rounded-full glass-percent-btn ${isActive ? 'active' : ''}`}
+                  style={{
+                    height: '38px',
+                    fontFamily: homePageFont,
+                    fontWeight: 500,
+                    fontSize: '13px',
+                    color: '#FFFFFF',
+                    letterSpacing: '0.3px'
+                  }}
+                >
+                  {percent}%
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Amount Section - Combined field with label inside */}
+        <div className="absolute" style={{ 
           left: 0, 
-          top: orderType === 'limit' ? '314px' : '186px', 
+          top: orderType === 'limit' ? '314px' : '245px', 
           width: '100%'
         }}>
-          {[10, 25, 50, 75, 100].map((percent) => {
-            const balance = activeTab === 'buy' 
-              ? parseFloat(ethBalance) 
-              : parseFloat(tradeSide === 'yes' ? position.yesShares : position.noShares);
-            const calculatedAmount = (balance * percent / 100).toFixed(4);
-            const isActive = tradeAmount === calculatedAmount;
-            
-            return (
+          <div 
+            className="rounded-[14px] overflow-hidden" 
+            style={{
+              width: '100%',
+              padding: '14px 16px 16px 16px',
+              background: 'linear-gradient(180deg, rgba(30,30,30,0.9) 0%, rgba(20,20,20,0.85) 100%)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              backdropFilter: 'blur(24px)'
+            }}
+          >
+            {/* Top row: Amount label + Balance */}
+            <div className="flex items-center justify-between mb-2">
+              <span style={{ fontFamily: homePageFont, fontWeight: 400, fontSize: '13px', color: 'rgba(255,255,255,0.45)' }}>Amount</span>
+              <span style={{ fontFamily: homePageFont, fontWeight: 400, fontSize: '13px', color: 'rgba(255,255,255,0.45)' }}>
+                {activeTab === 'buy'
+                  ? parseFloat(ethBalance).toFixed(2)
+                  : parseFloat(tradeSide === 'yes' ? position.yesShares : position.noShares).toFixed(2)}
+              </span>
+            </div>
+            {/* Bottom row: Input + Max button */}
+            <div className="flex items-center justify-between gap-3">
+              <input
+                type="text"
+                value={tradeAmount || '0'}
+                onChange={(e) => setTradeAmount(e.target.value)}
+                placeholder="0"
+                className="bg-transparent outline-none flex-1 min-w-0"
+                style={{ 
+                  fontFamily: homePageFont, 
+                  fontWeight: 600, 
+                  fontSize: '26px', 
+                  color: tradeAmount && parseFloat(tradeAmount) > 0 ? '#FFFFFF' : 'rgba(255,255,255,0.35)',
+                  letterSpacing: '-0.3px'
+                }}
+              />
               <button
-                key={percent}
-                onClick={() => setTradeAmount(calculatedAmount)}
-                className="flex-1 rounded-full transition-all"
+                onClick={() => {
+                  const balance = activeTab === 'buy' 
+                    ? parseFloat(ethBalance) 
+                    : parseFloat(tradeSide === 'yes' ? position.yesShares : position.noShares);
+                  setTradeAmount(balance.toFixed(4));
+                }}
+                className="rounded-[8px] transition-all hover:bg-[rgba(255,255,255,0.12)] flex-shrink-0"
                 style={{
-                  height: '36px',
-                  background: isActive ? 'rgba(255,255,255,0.08)' : 'rgba(20,20,20,0.6)',
-                  border: isActive ? '1px solid #FFE600' : '1px solid rgba(255,255,255,0.08)',
+                  padding: '8px 16px',
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.12)',
                   fontFamily: homePageFont,
-                  fontWeight: 400,
-                  fontSize: '13px',
+                  fontWeight: 500,
+                  fontSize: '14px',
                   color: '#FFFFFF'
                 }}
               >
-                {percent}%
+                Max
               </button>
-            );
-          })}
-        </div>
-
-        {/* Amount Section */}
-        <div className="absolute" style={{ 
-          left: 0, 
-          top: orderType === 'limit' ? '362px' : '234px', 
-          width: '100%'
-        }}>
-          <div className="flex items-center justify-between mb-2">
-            <span style={{ fontFamily: homePageFont, fontWeight: 300, fontSize: '14px', lineHeight: '20px', color: '#FFFFFF' }}>Amount</span>
-            <span style={{ 
-              fontFamily: homePageFont, 
-              fontWeight: 400, 
-              fontSize: '13px', 
-              color: '#8B8B8B',
-              background: 'rgba(255,255,255,0.08)',
-              padding: '4px 12px',
-              borderRadius: '6px'
-            }}>
-              {activeTab === 'buy'
-                ? parseFloat(ethBalance).toFixed(2)
-                : parseFloat(tradeSide === 'yes' ? position.yesShares : position.noShares).toFixed(2)}
-            </span>
-          </div>
-          
-          <div 
-            className="flex items-center rounded-[12px]" 
-            style={{
-              width: '100%',
-              height: '68px',
-              padding: '0 20px',
-              background: 'linear-gradient(180deg, rgba(32,32,32,0.92) 0%, rgba(14,14,14,0.68) 100%)',
-              border: '1px solid rgba(255,255,255,0.05)'
-            }}
-          >
-            <input
-              type="text"
-              value={tradeAmount || '0'}
-              onChange={(e) => setTradeAmount(e.target.value)}
-              placeholder="0"
-              className="flex-1 bg-transparent outline-none"
-              style={{ 
-                fontFamily: homePageFont, 
-                fontWeight: 600, 
-                fontSize: '28px', 
-                color: tradeAmount && parseFloat(tradeAmount) > 0 ? '#FFFFFF' : '#4A4A4A'
-              }}
-            />
-            <button
-              onClick={() => {
-                const balance = activeTab === 'buy' 
-                  ? parseFloat(ethBalance) 
-                  : parseFloat(tradeSide === 'yes' ? position.yesShares : position.noShares);
-                setTradeAmount(balance.toFixed(4));
-              }}
-              className="rounded-[8px] transition-all hover:bg-[#3a3a3a]"
-              style={{
-                padding: '8px 16px',
-                background: 'rgba(50,50,50,0.8)',
-                fontFamily: homePageFont,
-                fontWeight: 500,
-                fontSize: '14px',
-                color: '#FFFFFF'
-              }}
-            >
-              Max
-            </button>
+            </div>
           </div>
         </div>
 
-        {/* Entry Price + Platform Fee */}
-        <div className="absolute" style={{ left: 0, top: orderType === 'limit' ? '455px' : '327px', width: '100%' }}>
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span style={{ fontFamily: homePageFont, fontWeight: 300, fontSize: '13px', color: '#8B8B8B' }}>Entry Price</span>
-              <span style={{ fontFamily: homePageFont, fontWeight: 400, fontSize: '13px', color: '#FFFFFF' }}>${(currentPrice / 100).toFixed(2)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span style={{ fontFamily: homePageFont, fontWeight: 300, fontSize: '13px', color: '#8B8B8B' }}>Platform Fee</span>
-              <span style={{ fontFamily: homePageFont, fontWeight: 400, fontSize: '13px', color: '#FFFFFF' }}>2%</span>
-            </div>
+        {/* Platform Fee */}
+        <div className="absolute" style={{ left: 0, top: orderType === 'limit' ? '440px' : '370px', width: '100%' }}>
+          <div className="flex items-center justify-between">
+            <span style={{ fontFamily: homePageFont, fontWeight: 300, fontSize: '13px', color: 'rgba(255,255,255,0.45)' }}>Platform Fee</span>
+            <span style={{ fontFamily: homePageFont, fontWeight: 400, fontSize: '13px', color: '#FFFFFF' }}>2%</span>
           </div>
         </div>
 
@@ -1385,7 +1377,7 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
           className="glass-card rounded-[12px] absolute"
           style={{ 
             left: 0,
-            top: orderType === 'limit' ? '520px' : '410px',
+            top: orderType === 'limit' ? '485px' : '415px',
             width: '100%',
             height: '56px',
             background: 'linear-gradient(180deg, rgba(15,15,15,0.92) 0%, rgba(8,8,8,0.78) 100%)',
