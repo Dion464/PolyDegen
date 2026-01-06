@@ -38,7 +38,7 @@ export const CONTRACT_ABI = [
   "function batchPayoutWinners(uint256 _marketId, address[] calldata _winners) returns (uint256 totalPaid, uint256 totalFees)",
   
   // View functions
-  "function getUserPosition(uint256 _marketId, address _user) view returns (tuple(uint256 yesShares, uint256 noShares, uint256 totalInvested))",
+  "function getUserPosition(uint256 _marketId, address _user) view returns (tuple(uint256 yesShares, uint256 noShares, uint256 totalInvested, uint256 yesInvested, uint256 noInvested))",
   "function marketCreationFee() view returns (uint256)",
   
   // Events

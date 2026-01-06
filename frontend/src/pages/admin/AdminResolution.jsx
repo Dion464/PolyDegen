@@ -301,15 +301,15 @@ const AdminResolution = () => {
         let userNoInvested = BigInt(0);
         try {
           const position = await contracts.predictionMarket.getUserPosition(marketId, participant.userAddress);
-          // Note: getUserPosition returns (yesShares, noShares, totalInvested)
-          // We'll estimate investment based on shares proportion if yesInvested/noInvested not available
-          // For now, estimate: investment ≈ shares (1:1 ratio assumption)
-          userYesInvested = yesShares; // Estimate: 1 share = 1 TCENT invested
-          userNoInvested = noShares;   // Estimate: 1 share = 1 TCENT invested
+          // getUserPosition returns (yesShares, noShares, totalInvested, yesInvested, noInvested)
+          userYesInvested = BigInt(position.yesInvested?.toString() || '0');
+          userNoInvested = BigInt(position.noInvested?.toString() || '0');
+          console.log(`Position for ${participant.userAddress}: yesInvested=${userYesInvested}, noInvested=${userNoInvested}`);
         } catch (err) {
-          console.warn(`Could not get position for ${participant.userAddress}, using estimates`);
-          userYesInvested = yesShares;
-          userNoInvested = noShares;
+          console.warn(`Could not get position for ${participant.userAddress}, using participant data`);
+          // Fallback: use participant data if available, otherwise use shares as rough estimate
+          userYesInvested = BigInt(participant.yesInvested || '0');
+          userNoInvested = BigInt(participant.noInvested || '0');
         }
 
         let won = false;
