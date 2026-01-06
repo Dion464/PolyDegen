@@ -120,6 +120,7 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
   const [tradeAmount, setTradeAmount] = useState('0.1');
   const [tradeSide, setTradeSide] = useState('yes');
   const [orderType, setOrderType] = useState('market');
+  
   const [limitPrice, setLimitPrice] = useState('');
   const [activeLimitButton, setActiveLimitButton] = useState('market'); // 'minus5', 'market', 'plus5'
   const [position, setPosition] = useState({ yesShares: '0', noShares: '0', totalInvested: '0' });
@@ -852,7 +853,7 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
         // Update immediately - no delay
         fetchData();
       } else {
-        // Market order - sell directly via AMM (instant on-chain)
+        // Market order - creates a sell order that waits for a buyer
         if (!signer) {
           toast.error('Please connect your wallet');
           setLoading(false);
@@ -865,13 +866,20 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
           return;
         }
 
+        // Show info toast explaining sell orders
+        showGlassToast({
+          title: 'Placing sell order',
+          description: 'Your shares will be placed as a sell order and will only execute when someone buys them.',
+          duration: 6000
+        });
+
         const receipt = await sellShares(marketId, tradeSide === 'yes', tradeAmount);
         
         showTransactionToast({
-          icon: '✅',
-          title: `${tradeSide === 'yes' ? 'YES' : 'NO'} TCENT sold`,
-          description: `${parseFloat(tradeAmount).toFixed(4)} ${currencySymbol} released via AMM.`,
-          txHash: receipt?.transactionHash || receipt?.hash
+          title: `${tradeSide === 'yes' ? 'YES' : 'NO'} sell order placed`,
+          description: `Your ${parseFloat(tradeAmount).toFixed(4)} ${currencySymbol} shares are now available for purchase. They will execute when a buyer matches your order.`,
+          txHash: receipt?.transactionHash || receipt?.hash,
+          duration: 8000
         });
 
         // Calculate shares and cost for position update (use tradeAmount before clearing)
@@ -1144,7 +1152,11 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
         {/* Market/Limit Tabs at y:137 */}
           <div className="absolute flex items-center w-full" style={{ left: 0, top: '137px', height: '40px', gap: '8px' }}>
           <button
-            onClick={() => { setOrderType('market'); setLimitPrice(''); setActiveLimitButton('market'); }}
+            onClick={() => { 
+              setOrderType('market'); 
+              setLimitPrice(''); 
+              setActiveLimitButton('market'); 
+            }}
             className="glass-card flex-1 flex items-center justify-center rounded-[12px]"
             style={{ 
               height: '40px', 
