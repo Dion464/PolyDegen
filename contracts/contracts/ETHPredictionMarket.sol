@@ -1080,15 +1080,15 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             uint256 losingPoolShare = 0;
             
             if (market.outcome == 1 && position.yesShares > 0) {
-                // YES won - use actual TCENT investment, split losing pool by TCENT percentage
-                require(market.totalYesInvested > 0, "No winning investment");
+                // YES won - get investment back + split losing pool by SHARE percentage
+                require(market.totalYesShares > 0, "No winning shares");
                 
-                // User's actual TCENT investment
+                // User's actual TCENT investment (what they get back)
                 userInvestment = position.yesInvested;
                 
-                // Calculate percentage of losing pool based on TCENT investment
-                if (market.totalYesInvested > 0 && market.noPool > 0) {
-                    losingPoolShare = (market.noPool * position.yesInvested) / market.totalYesInvested;
+                // Calculate percentage of losing pool based on SHARES (not TCENT)
+                if (market.totalYesShares > 0 && market.noPool > 0) {
+                    losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
                 }
                 
                 grossPayout = userInvestment + losingPoolShare;
@@ -1097,15 +1097,15 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                 position.noShares = 0;
                 position.noInvested = 0;
             } else if (market.outcome == 2 && position.noShares > 0) {
-                // NO won - use actual TCENT investment, split losing pool by TCENT percentage
-                require(market.totalNoInvested > 0, "No winning investment");
+                // NO won - get investment back + split losing pool by SHARE percentage
+                require(market.totalNoShares > 0, "No winning shares");
                 
-                // User's actual TCENT investment
+                // User's actual TCENT investment (what they get back)
                 userInvestment = position.noInvested;
                 
-                // Calculate percentage of losing pool based on TCENT investment
-                if (market.totalNoInvested > 0 && market.yesPool > 0) {
-                    losingPoolShare = (market.yesPool * position.noInvested) / market.totalNoInvested;
+                // Calculate percentage of losing pool based on SHARES (not TCENT)
+                if (market.totalNoShares > 0 && market.yesPool > 0) {
+                    losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
                 }
                 
                 grossPayout = userInvestment + losingPoolShare;
@@ -1177,15 +1177,16 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         uint256 losingPoolShare = 0;
         
         if (market.outcome == 1 && position.yesShares > 0) {
-            // YES won - use actual TCENT investment, split losing pool by TCENT percentage
-            require(market.totalYesInvested > 0, "No winning investment");
+            // YES won - get investment back + split losing pool by SHARE percentage
+            require(market.totalYesShares > 0, "No winning shares");
             
-            // User's actual TCENT investment
+            // User's actual TCENT investment (what they get back)
             userInvestment = position.yesInvested;
             
-            // Calculate percentage of losing pool based on TCENT investment
-            if (market.totalYesInvested > 0 && market.noPool > 0) {
-                losingPoolShare = (market.noPool * position.yesInvested) / market.totalYesInvested;
+            // Calculate percentage of losing pool based on SHARES (not TCENT)
+            // losingPoolShare = (losingPool * userShares) / totalWinningShares
+            if (market.totalYesShares > 0 && market.noPool > 0) {
+                losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
             }
             
             grossPayout = userInvestment + losingPoolShare;
@@ -1195,15 +1196,16 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             position.noShares = 0;
             position.noInvested = 0;
         } else if (market.outcome == 2 && position.noShares > 0) {
-            // NO won - use actual TCENT investment, split losing pool by TCENT percentage
-            require(market.totalNoInvested > 0, "No winning investment");
+            // NO won - get investment back + split losing pool by SHARE percentage
+            require(market.totalNoShares > 0, "No winning shares");
             
-            // User's actual TCENT investment
+            // User's actual TCENT investment (what they get back)
             userInvestment = position.noInvested;
             
-            // Calculate percentage of losing pool based on TCENT investment
-            if (market.totalNoInvested > 0 && market.yesPool > 0) {
-                losingPoolShare = (market.yesPool * position.noInvested) / market.totalNoInvested;
+            // Calculate percentage of losing pool based on SHARES (not TCENT)
+            // losingPoolShare = (losingPool * userShares) / totalWinningShares
+            if (market.totalNoShares > 0 && market.yesPool > 0) {
+                losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
             }
             
             grossPayout = userInvestment + losingPoolShare;
