@@ -470,38 +470,47 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                     if (sellOrder.isYes) {
                         buyerPos.yesShares += sharesToTrade;
                         // Calculate seller's proportional investment being withdrawn
-                        uint256 sellerTotalShares = sellerPos.yesShares + sharesToTrade; // shares before sale
+                        uint256 sellerTotalShares = sellerPos.yesShares + sharesToTrade;
                         uint256 sellerInvestmentWithdrawn = 0;
                         if (sellerTotalShares > 0) {
                             sellerInvestmentWithdrawn = (sellerPos.yesInvested * sharesToTrade) / sellerTotalShares;
                             sellerPos.yesInvested -= sellerInvestmentWithdrawn;
                         }
-                        // Buyer's investment is what they ACTUALLY PAID
                         buyerPos.yesInvested += buyerInvestment;
-                        // Update market totals
                         market.totalYesInvested = market.totalYesInvested >= sellerInvestmentWithdrawn 
                             ? market.totalYesInvested - sellerInvestmentWithdrawn + buyerInvestment 
                             : buyerInvestment;
+                        // Update pool: net change = buyerInvestment - sellerInvestmentWithdrawn
+                        if (buyerInvestment >= sellerInvestmentWithdrawn) {
+                            market.yesPool += (buyerInvestment - sellerInvestmentWithdrawn);
+                        } else {
+                            market.yesPool = market.yesPool >= (sellerInvestmentWithdrawn - buyerInvestment) 
+                                ? market.yesPool - (sellerInvestmentWithdrawn - buyerInvestment) : 0;
+                        }
                     } else {
                         buyerPos.noShares += sharesToTrade;
                         // Calculate seller's proportional investment being withdrawn
-                        uint256 sellerTotalShares = sellerPos.noShares + sharesToTrade; // shares before sale
+                        uint256 sellerTotalShares = sellerPos.noShares + sharesToTrade;
                         uint256 sellerInvestmentWithdrawn = 0;
                         if (sellerTotalShares > 0) {
                             sellerInvestmentWithdrawn = (sellerPos.noInvested * sharesToTrade) / sellerTotalShares;
                             sellerPos.noInvested -= sellerInvestmentWithdrawn;
                         }
-                        // Buyer's investment is what they ACTUALLY PAID
                         buyerPos.noInvested += buyerInvestment;
-                        // Update market totals
                         market.totalNoInvested = market.totalNoInvested >= sellerInvestmentWithdrawn 
                             ? market.totalNoInvested - sellerInvestmentWithdrawn + buyerInvestment 
                             : buyerInvestment;
+                        // Update pool: net change = buyerInvestment - sellerInvestmentWithdrawn
+                        if (buyerInvestment >= sellerInvestmentWithdrawn) {
+                            market.noPool += (buyerInvestment - sellerInvestmentWithdrawn);
+                        } else {
+                            market.noPool = market.noPool >= (sellerInvestmentWithdrawn - buyerInvestment) 
+                                ? market.noPool - (sellerInvestmentWithdrawn - buyerInvestment) : 0;
+                        }
                     }
                     buyerPos.totalInvested += totalCost;
                     
-                    // Decrease pool when seller withdraws money
-                    _decreasePool(sellOrder.marketId, sellOrder.isYes, sellerPayout);
+                    // Pay seller
                     payable(sellOrder.seller).transfer(sellerPayout);
                     
                     // Refund excess ETH from limit order if any
@@ -639,12 +648,19 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                 sellerInvestmentWithdrawn = (sellerPosition.yesInvested * order.shares) / sellerTotalShares;
                 sellerPosition.yesInvested -= sellerInvestmentWithdrawn;
             }
-            // Buyer's investment is what they ACTUALLY PAID, not seller's old investment
+            // Buyer's investment is what they ACTUALLY PAID
             buyerPosition.yesInvested += buyerInvestment;
             // Update market totals
             market.totalYesInvested = market.totalYesInvested >= sellerInvestmentWithdrawn 
                 ? market.totalYesInvested - sellerInvestmentWithdrawn + buyerInvestment 
                 : buyerInvestment;
+            // Update pool: net change = buyerInvestment - sellerInvestmentWithdrawn
+            if (buyerInvestment >= sellerInvestmentWithdrawn) {
+                market.yesPool += (buyerInvestment - sellerInvestmentWithdrawn);
+            } else {
+                market.yesPool = market.yesPool >= (sellerInvestmentWithdrawn - buyerInvestment) 
+                    ? market.yesPool - (sellerInvestmentWithdrawn - buyerInvestment) : 0;
+            }
         } else {
             buyerPosition.noShares += order.shares;
             // Calculate seller's proportional investment being withdrawn
@@ -654,17 +670,21 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                 sellerInvestmentWithdrawn = (sellerPosition.noInvested * order.shares) / sellerTotalShares;
                 sellerPosition.noInvested -= sellerInvestmentWithdrawn;
             }
-            // Buyer's investment is what they ACTUALLY PAID, not seller's old investment
+            // Buyer's investment is what they ACTUALLY PAID
             buyerPosition.noInvested += buyerInvestment;
             // Update market totals
             market.totalNoInvested = market.totalNoInvested >= sellerInvestmentWithdrawn 
                 ? market.totalNoInvested - sellerInvestmentWithdrawn + buyerInvestment 
                 : buyerInvestment;
+            // Update pool: net change = buyerInvestment - sellerInvestmentWithdrawn
+            if (buyerInvestment >= sellerInvestmentWithdrawn) {
+                market.noPool += (buyerInvestment - sellerInvestmentWithdrawn);
+            } else {
+                market.noPool = market.noPool >= (sellerInvestmentWithdrawn - buyerInvestment) 
+                    ? market.noPool - (sellerInvestmentWithdrawn - buyerInvestment) : 0;
+            }
         }
         buyerPosition.totalInvested += totalCost;
-        
-        // Decrease pool when seller withdraws money
-        _decreasePool(order.marketId, order.isYes, sellerPayout);
         
         // Note: We don't reduce market.totalYesShares/totalNoShares because
         // shares are just transferred between users, not created/destroyed
@@ -721,53 +741,8 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         emit SellOrderCancelled(_orderId, order.marketId, msg.sender);
     }
 
-    /**
-     * @dev Get all active sell orders for a market
-     * @param _marketId The market ID
-     * @return activeSellOrders Array of active sell orders
-     */
-    function getMarketSellOrders(uint256 _marketId) external view returns (SellOrder[] memory) {
-        uint256[] storage orderIds = marketSellOrders[_marketId];
-        
-        // Count active orders
-        uint256 activeCount = 0;
-        for (uint256 i = 0; i < orderIds.length; i++) {
-            SellOrder storage order = allSellOrders[orderIds[i]];
-            if (!order.filled && !order.cancelled) {
-                activeCount++;
-            }
-        }
-        
-        // Build result array
-        SellOrder[] memory activeSellOrders = new SellOrder[](activeCount);
-        uint256 index = 0;
-        for (uint256 i = 0; i < orderIds.length; i++) {
-            SellOrder storage order = allSellOrders[orderIds[i]];
-            if (!order.filled && !order.cancelled) {
-                activeSellOrders[index] = order;
-                index++;
-            }
-        }
-        
-        return activeSellOrders;
-    }
-
-    /**
-     * @dev Get all sell orders for a user
-     * @param _user The user address
-     * @return userOrders Array of user's sell orders
-     */
-    function getUserSellOrders(address _user) external view returns (SellOrder[] memory) {
-        uint256[] storage orderIds = userSellOrders[_user];
-        SellOrder[] memory userOrders = new SellOrder[](orderIds.length);
-        
-        for (uint256 i = 0; i < orderIds.length; i++) {
-            userOrders[i] = allSellOrders[orderIds[i]];
-        }
-        
-        return userOrders;
-    }
-
+    // Removed getMarketSellOrders and getUserSellOrders to reduce contract size
+    
     // Legacy sellShares function - redirects to placeSellOrder with current market price
     // This maintains backward compatibility with existing frontends
     function sellShares(uint256 _marketId, bool _isYes, uint256 _shares) external nonReentrant {
@@ -922,36 +897,7 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         emit MarketResolved(_marketId, proposal.proposedOutcome, market.totalVolume);
     }
     
-    /**
-     * @dev Get resolution proposal details
-     * @param _marketId The market ID
-     */
-    function getResolutionProposal(uint256 _marketId) external view returns (
-        uint8 proposedOutcome,
-        address proposer,
-        uint256 proposalTime,
-        uint256 proposerBond,
-        bool disputed,
-        address disputer,
-        uint256 disputeTime,
-        bool finalized,
-        uint256 timeUntilFinalizable
-    ) {
-        ResolutionProposal memory proposal = resolutionProposals[_marketId];
-        uint256 finalizableTime = proposal.proposalTime + disputePeriod;
-        
-        return (
-            proposal.proposedOutcome,
-            proposal.proposer,
-            proposal.proposalTime,
-            proposal.proposerBond,
-            proposal.disputed,
-            proposal.disputer,
-            proposal.disputeTime,
-            proposal.finalized,
-            block.timestamp >= finalizableTime ? 0 : finalizableTime - block.timestamp
-        );
-    }
+    // Removed getResolutionProposal to reduce contract size
     
     // ============ Admin Functions for Optimistic Oracle ============
     
@@ -1347,39 +1293,46 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                     
                     if (sellOrder.isYes) {
                         buyerPosition.yesShares += sharesToTrade;
-                        // Calculate seller's proportional investment being withdrawn
-                        uint256 sellerTotalShares = sellerPosition.yesShares + sharesToTrade; // shares before sale
+                        uint256 sellerTotalShares = sellerPosition.yesShares + sharesToTrade;
                         uint256 sellerInvestmentWithdrawn = 0;
                         if (sellerTotalShares > 0) {
                             sellerInvestmentWithdrawn = (sellerPosition.yesInvested * sharesToTrade) / sellerTotalShares;
                             sellerPosition.yesInvested -= sellerInvestmentWithdrawn;
                         }
-                        // Buyer's investment is what they ACTUALLY PAID
                         buyerPosition.yesInvested += buyerInvestment;
-                        // Update market totals
                         market.totalYesInvested = market.totalYesInvested >= sellerInvestmentWithdrawn 
                             ? market.totalYesInvested - sellerInvestmentWithdrawn + buyerInvestment 
                             : buyerInvestment;
+                        // Update pool: net change = buyerInvestment - sellerInvestmentWithdrawn
+                        if (buyerInvestment >= sellerInvestmentWithdrawn) {
+                            market.yesPool += (buyerInvestment - sellerInvestmentWithdrawn);
+                        } else {
+                            market.yesPool = market.yesPool >= (sellerInvestmentWithdrawn - buyerInvestment) 
+                                ? market.yesPool - (sellerInvestmentWithdrawn - buyerInvestment) : 0;
+                        }
                     } else {
                         buyerPosition.noShares += sharesToTrade;
-                        // Calculate seller's proportional investment being withdrawn
-                        uint256 sellerTotalShares = sellerPosition.noShares + sharesToTrade; // shares before sale
+                        uint256 sellerTotalShares = sellerPosition.noShares + sharesToTrade;
                         uint256 sellerInvestmentWithdrawn = 0;
                         if (sellerTotalShares > 0) {
                             sellerInvestmentWithdrawn = (sellerPosition.noInvested * sharesToTrade) / sellerTotalShares;
                             sellerPosition.noInvested -= sellerInvestmentWithdrawn;
                         }
-                        // Buyer's investment is what they ACTUALLY PAID
                         buyerPosition.noInvested += buyerInvestment;
-                        // Update market totals
                         market.totalNoInvested = market.totalNoInvested >= sellerInvestmentWithdrawn 
                             ? market.totalNoInvested - sellerInvestmentWithdrawn + buyerInvestment 
                             : buyerInvestment;
+                        // Update pool: net change = buyerInvestment - sellerInvestmentWithdrawn
+                        if (buyerInvestment >= sellerInvestmentWithdrawn) {
+                            market.noPool += (buyerInvestment - sellerInvestmentWithdrawn);
+                        } else {
+                            market.noPool = market.noPool >= (sellerInvestmentWithdrawn - buyerInvestment) 
+                                ? market.noPool - (sellerInvestmentWithdrawn - buyerInvestment) : 0;
+                        }
                     }
                     buyerPosition.totalInvested += totalCost;
                     
-                    // Decrease pool when seller withdraws money
-                    _decreasePool(limitOrder.marketId, sellOrder.isYes, sellerPayout);
+                    // Pay seller
                     payable(sellOrder.seller).transfer(sellerPayout);
                     
                     // Refund excess ETH from limit order if any
