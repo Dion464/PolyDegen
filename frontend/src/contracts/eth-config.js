@@ -40,8 +40,6 @@ export const CONTRACT_ABI = [
   // View functions
   "function getUserPosition(uint256 _marketId, address _user) view returns (tuple(uint256 yesShares, uint256 noShares, uint256 totalInvested))",
   "function marketCreationFee() view returns (uint256)",
-  "function calculatePotentialPayout(uint256 _marketId, address _user, bool _isYes) view returns (uint256)",
-  "function getPayoutPerShare(uint256 _marketId, bool _isYes) view returns (uint256)",
   
   // Events
   "event MarketCreated(uint256 indexed marketId, address indexed creator, string question, string category, uint256 endTime)",
