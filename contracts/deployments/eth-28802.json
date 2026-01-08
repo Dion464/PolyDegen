@@ -1,17 +1,13 @@
 {
   "network": "unknown",
   "chainId": 28802,
+  "deployer": "0xed27C34A8434ADc188A2D7503152024F64967B61",
+  "timestamp": "2026-01-08T09:33:32.016Z",
   "contracts": {
-    "ETHPredictionMarket": {
-      "address": "0x768c9AA0a75f6B2e4871F75c75521313C53DCd8B",
-      "deployer": "0xed27C34A8434ADc188A2D7503152024F64967B61",
-      "deploymentBlock": null,
-      "transactionHash": "0xd1fa799081adb47bafee8bda9c0e175a4a8172a5936b313f587fe0c30f83de3e"
-    }
+    "ETHPredictionMarket": "0x1391b2B2eBDF166480b964c16c51c9B0DEe96404"
   },
   "config": {
-    "marketCreationFee": "0.01",
-    "platformFeePercent": "200"
-  },
-  "timestamp": "2026-01-06T15:24:14.288Z"
+    "marketCreationFee": "10000000000000000",
+    "platformFeeBasisPoints": 200
+  }
 }

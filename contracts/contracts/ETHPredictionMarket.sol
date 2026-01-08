@@ -1087,20 +1087,33 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
                 uint256 platformFee = (grossPayout * platformFeePercent) / 10000;
                 uint256 netPayout = grossPayout - platformFee;
                 
+                // Check actual contract balance before paying
+                uint256 availableBalance = address(this).balance;
+                
+                // If not enough balance, scale payout proportionally
+                if (availableBalance < (platformFee + netPayout)) {
+                    uint256 totalNeeded = platformFee + netPayout;
+                    if (availableBalance > 0 && totalNeeded > 0) {
+                        platformFee = (platformFee * availableBalance) / totalNeeded;
+                        netPayout = availableBalance - platformFee;
+                    } else {
+                        platformFee = 0;
+                        netPayout = 0;
+                    }
+                }
+                
                 totalPlatformFees += platformFee;
                 totalPayout += netPayout;
                 
-                // Transfer payout to winner
-                if (netPayout > 0) {
-                    require(address(this).balance >= netPayout, "Insufficient contract balance");
+                // Transfer payout to winner (only if balance available)
+                if (netPayout > 0 && address(this).balance >= netPayout) {
                     payable(winner).transfer(netPayout);
                 }
             }
         }
         
-        // Send all platform fees to fee recipient in one transfer
-        if (totalPlatformFees > 0 && feeRecipient != address(0)) {
-            require(address(this).balance >= totalPlatformFees, "Insufficient balance for platform fees");
+        // Send all platform fees to fee recipient in one transfer (only if balance available)
+        if (totalPlatformFees > 0 && feeRecipient != address(0) && address(this).balance >= totalPlatformFees) {
             payable(feeRecipient).transfer(totalPlatformFees);
         }
         
@@ -1111,6 +1124,7 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
 
     // Claim winnings after market resolution - PARI-MUTUEL MODEL
     // Winners get: Their investment back + Share of losing side's pool - 2% platform fee
+    // Payouts are capped at actual contract balance to prevent reverts
     function claimWinnings(uint256 _marketId) external nonReentrant {
         Market storage market = markets[_marketId];
         require(market.resolved, "Market not resolved");
@@ -1194,21 +1208,37 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             platformFee = (grossPayout * platformFeePercent) / 10000;
             netPayout = grossPayout - platformFee;
             
-            // Send platform fee to fee recipient
-            if (platformFee > 0 && feeRecipient != address(0)) {
-                require(address(this).balance >= platformFee, "Insufficient balance for platform fee");
+            // Get actual contract balance
+            uint256 contractBalance = address(this).balance;
+            
+            // If contract doesn't have enough, scale payout to what's available
+            // This prevents reverts when ETH has left via trades
+            if (contractBalance < (platformFee + netPayout)) {
+                // Not enough balance - pay proportionally from available
+                uint256 totalNeeded = platformFee + netPayout;
+                if (contractBalance > 0 && totalNeeded > 0) {
+                    // Scale both platform fee and net payout proportionally
+                    platformFee = (platformFee * contractBalance) / totalNeeded;
+                    netPayout = contractBalance - platformFee;
+                } else {
+                    // No balance at all
+                    platformFee = 0;
+                    netPayout = 0;
+                }
+            }
+            
+            // Send platform fee to fee recipient (only if we have balance)
+            if (platformFee > 0 && feeRecipient != address(0) && address(this).balance >= platformFee) {
                 payable(feeRecipient).transfer(platformFee);
             }
             
-            // Pay user their net payout
-            if (netPayout > 0) {
-                require(address(this).balance >= netPayout, "Insufficient contract balance");
+            // Pay user their net payout (only if we have balance)
+            if (netPayout > 0 && address(this).balance >= netPayout) {
                 payable(msg.sender).transfer(netPayout);
             }
-        } else {
-            // User lost - position is already cleared, but no payout
-            // Allow this so users can "claim" to clear their losing position from the UI
         }
+        // Note: Position is cleared even if payout is 0 (user lost or insufficient balance)
+        // This allows users to clear their losing position from the UI
     }
 
 

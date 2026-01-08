@@ -17,9 +17,10 @@ async function main() {
   
   const marketCreationFee = ethers.utils.parseEther("0.01"); // 0.01 ETH
   const platformFeeBasisPoints = 200; // 2%
+  const feeRecipient = deployer.address; // Fee recipient = deployer
   
   const ETHPredictionMarket = await ethers.getContractFactory("ETHPredictionMarket");
-  const contract = await ETHPredictionMarket.deploy(marketCreationFee, platformFeeBasisPoints);
+  const contract = await ETHPredictionMarket.deploy(marketCreationFee, platformFeeBasisPoints, feeRecipient);
   await contract.deployed();
   
   console.log("✅ ETHPredictionMarket deployed to:", contract.address);
