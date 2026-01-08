@@ -274,6 +274,26 @@ const CreateMarket = () => {
 
   return (
     <div className="min-h-screen bg-[#0E0E0E]" style={homePageFont}>
+      <style>{`
+        /* Make date picker icon white */
+        .date-input-white::-webkit-calendar-picker-indicator {
+          filter: invert(1);
+          cursor: pointer;
+        }
+        
+        /* Make time picker icon white */
+        .time-input-white::-webkit-calendar-picker-indicator {
+          filter: invert(1);
+          cursor: pointer;
+        }
+        
+        /* For Firefox */
+        .date-input-white::-moz-calendar-picker-indicator,
+        .time-input-white::-moz-calendar-picker-indicator {
+          filter: invert(1);
+          cursor: pointer;
+        }
+      `}</style>
       <WormStyleNavbar />
       
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
@@ -407,7 +427,7 @@ const CreateMarket = () => {
                   type="date"
                   value={formData.endDate}
                   onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                  className="w-full px-4 py-3 rounded-[12px] glass-card text-white"
+                  className="w-full px-4 py-3 rounded-[12px] glass-card text-white date-input-white"
                   style={{
                     background: 'linear-gradient(180deg, rgba(32,32,32,0.92) 0%, rgba(14,14,14,0.68) 100%)',
                     border: '1px solid rgba(255,255,255,0.05)'
@@ -423,7 +443,7 @@ const CreateMarket = () => {
                   type="time"
                   value={formData.endTime}
                   onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                  className="w-full px-4 py-3 rounded-[12px] glass-card text-white"
+                  className="w-full px-4 py-3 rounded-[12px] glass-card text-white time-input-white"
                   style={{
                     background: 'linear-gradient(180deg, rgba(32,32,32,0.92) 0%, rgba(14,14,14,0.68) 100%)',
                     border: '1px solid rgba(255,255,255,0.05)'
@@ -443,7 +463,7 @@ const CreateMarket = () => {
                   type="date"
                   value={formData.resolutionDate}
                   onChange={(e) => setFormData({ ...formData, resolutionDate: e.target.value })}
-                  className="w-full px-4 py-3 rounded-[12px] glass-card text-white"
+                  className="w-full px-4 py-3 rounded-[12px] glass-card text-white date-input-white"
                   style={{
                     background: 'linear-gradient(180deg, rgba(32,32,32,0.92) 0%, rgba(14,14,14,0.68) 100%)',
                     border: '1px solid rgba(255,255,255,0.05)'
@@ -459,7 +479,7 @@ const CreateMarket = () => {
                   type="time"
                   value={formData.resolutionTime}
                   onChange={(e) => setFormData({ ...formData, resolutionTime: e.target.value })}
-                  className="w-full px-4 py-3 rounded-[12px] glass-card text-white"
+                  className="w-full px-4 py-3 rounded-[12px] glass-card text-white time-input-white"
                   style={{
                     background: 'linear-gradient(180deg, rgba(32,32,32,0.92) 0%, rgba(14,14,14,0.68) 100%)',
                     border: '1px solid rgba(255,255,255,0.05)'
