@@ -1022,39 +1022,36 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             }
             
             uint256 grossPayout = 0;
-            uint256 userInvestment = 0;
             uint256 losingPoolShare = 0;
             
             if (market.outcome == 1 && position.yesShares > 0) {
-                // YES won - get investment back + split losing pool by SHARE percentage
+                // YES won - split losing pool by SHARE percentage (pari-mutuel: winners only get losing pool)
                 require(market.totalYesShares > 0, "No winning shares");
                 
-                // User's actual TCENT investment (what they get back)
-                userInvestment = position.yesInvested;
-                
                 // Calculate percentage of losing pool based on SHARES (not TCENT)
+                // Winners only split the losing pool - their investment stays in winning pool
                 if (market.totalYesShares > 0 && market.noPool > 0) {
                     losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
                 }
                 
-                grossPayout = userInvestment + losingPoolShare;
+                // Gross payout is ONLY the losing pool share (not investment + losing pool)
+                grossPayout = losingPoolShare;
                 position.yesShares = 0;
                 position.yesInvested = 0;
                 position.noShares = 0;
                 position.noInvested = 0;
             } else if (market.outcome == 2 && position.noShares > 0) {
-                // NO won - get investment back + split losing pool by SHARE percentage
+                // NO won - split losing pool by SHARE percentage (pari-mutuel: winners only get losing pool)
                 require(market.totalNoShares > 0, "No winning shares");
                 
-                // User's actual TCENT investment (what they get back)
-                userInvestment = position.noInvested;
-                
                 // Calculate percentage of losing pool based on SHARES (not TCENT)
+                // Winners only split the losing pool - their investment stays in winning pool
                 if (market.totalNoShares > 0 && market.yesPool > 0) {
                     losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
                 }
                 
-                grossPayout = userInvestment + losingPoolShare;
+                // Gross payout is ONLY the losing pool share (not investment + losing pool)
+                grossPayout = losingPoolShare;
                 position.noShares = 0;
                 position.noInvested = 0;
                 position.yesShares = 0;
@@ -1123,7 +1120,8 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
     }
 
     // Claim winnings after market resolution - PARI-MUTUEL MODEL
-    // Winners get: Their investment back + Share of losing side's pool - 2% platform fee
+    // Winners get: Share of losing side's pool - 2% platform fee
+    // Note: Winners only split the losing pool, their investment stays in the winning pool
     function claimWinnings(uint256 _marketId) external nonReentrant {
         Market storage market = markets[_marketId];
         require(market.resolved, "Market not resolved");
@@ -1132,44 +1130,39 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         require(position.yesShares > 0 || position.noShares > 0, "No position in market");
 
         uint256 grossPayout = 0;
-        uint256 userInvestment = 0;
         uint256 losingPoolShare = 0;
         bool isWinner = false;
         
         // Store position values before any modifications
         uint256 userYesShares = position.yesShares;
         uint256 userNoShares = position.noShares;
-        uint256 userYesInvested = position.yesInvested;
-        uint256 userNoInvested = position.noInvested;
         
         if (market.outcome == 1 && userYesShares > 0) {
-            // YES won - get investment back + split losing pool by SHARE percentage
+            // YES won - split losing pool by SHARE percentage (pari-mutuel: winners only get losing pool)
             require(market.totalYesShares > 0, "No winning shares");
             isWinner = true;
             
-            // User's actual TCENT investment (what they get back)
-            userInvestment = userYesInvested;
-            
             // Calculate percentage of losing pool based on SHARES (not TCENT)
+            // Winners only split the losing pool - their investment stays in winning pool
             if (market.totalYesShares > 0 && market.noPool > 0) {
                 losingPoolShare = (market.noPool * userYesShares) / market.totalYesShares;
             }
             
-            grossPayout = userInvestment + losingPoolShare;
+            // Gross payout is ONLY the losing pool share (not investment + losing pool)
+            grossPayout = losingPoolShare;
         } else if (market.outcome == 2 && userNoShares > 0) {
-            // NO won - get investment back + split losing pool by SHARE percentage
+            // NO won - split losing pool by SHARE percentage (pari-mutuel: winners only get losing pool)
             require(market.totalNoShares > 0, "No winning shares");
             isWinner = true;
             
-            // User's actual TCENT investment (what they get back)
-            userInvestment = userNoInvested;
-            
             // Calculate percentage of losing pool based on SHARES (not TCENT)
+            // Winners only split the losing pool - their investment stays in winning pool
             if (market.totalNoShares > 0 && market.yesPool > 0) {
                 losingPoolShare = (market.yesPool * userNoShares) / market.totalNoShares;
             }
             
-            grossPayout = userInvestment + losingPoolShare;
+            // Gross payout is ONLY the losing pool share (not investment + losing pool)
+            grossPayout = losingPoolShare;
         } else if (market.outcome == 3) {
             // INVALID - refund proportionally based on total invested
             uint256 totalShares = userYesShares + userNoShares;
@@ -1189,8 +1182,22 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             platformFee = (grossPayout * platformFeePercent) / 10000;
             netPayout = grossPayout - platformFee;
             
-            // Require contract has enough balance to pay
-            require(address(this).balance >= (platformFee + netPayout), "Insufficient contract balance for payout");
+            // Check actual contract balance before paying
+            uint256 availableBalance = address(this).balance;
+            uint256 totalNeeded = platformFee + netPayout;
+            
+            // If not enough balance, scale payout proportionally (like batchPayoutWinners)
+            if (availableBalance < totalNeeded) {
+                if (availableBalance > 0 && totalNeeded > 0) {
+                    // Scale both fee and payout proportionally
+                    platformFee = (platformFee * availableBalance) / totalNeeded;
+                    netPayout = availableBalance - platformFee;
+                } else {
+                    // No balance available
+                    platformFee = 0;
+                    netPayout = 0;
+                }
+            }
             
             // Clear position FIRST (before external calls to prevent reentrancy)
             position.yesShares = 0;
@@ -1198,13 +1205,13 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             position.yesInvested = 0;
             position.noInvested = 0;
             
-            // Send platform fee to fee recipient
-            if (platformFee > 0 && feeRecipient != address(0)) {
+            // Send platform fee to fee recipient (only if balance available)
+            if (platformFee > 0 && feeRecipient != address(0) && address(this).balance >= platformFee) {
                 payable(feeRecipient).transfer(platformFee);
             }
             
-            // Pay user their net payout
-            if (netPayout > 0) {
+            // Pay user their net payout (only if balance available)
+            if (netPayout > 0 && address(this).balance >= netPayout) {
                 payable(msg.sender).transfer(netPayout);
             }
         } else {

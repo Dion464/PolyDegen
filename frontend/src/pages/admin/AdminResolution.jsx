@@ -318,17 +318,17 @@ const AdminResolution = () => {
         let netPayout = '0';   // After 2% platform fee
         
         if (outcome === 1 && hasYesShares) {
-          // YES won - user gets YES investment back + share of NO pool
+          // YES won - user gets share of NO pool only (pari-mutuel: winners only split losing pool)
           won = true;
           shares = (yesShares / BigInt(1e18)).toString();
           
-          // Calculate: Investment + (NO pool * user YES shares / total YES shares)
-          const userInvestment = userYesInvested;
+          // Calculate: (NO pool * user YES shares / total YES shares) - winners only get losing pool
           let losingPoolShare = BigInt(0);
           if (totalYesShares > 0n && noPool > 0n) {
             losingPoolShare = (noPool * yesShares) / totalYesShares;
           }
-          grossPayout = (userInvestment + losingPoolShare).toString();
+          // Gross payout is ONLY the losing pool share (not investment + losing pool)
+          grossPayout = losingPoolShare.toString();
           
           // Apply 2% platform fee
           const platformFee = (BigInt(grossPayout) * BigInt(200)) / BigInt(10000);
@@ -336,17 +336,17 @@ const AdminResolution = () => {
           
           console.log(`✅ ${participant.userAddress} WON with ${shares} YES shares = ${(BigInt(netPayout) / BigInt(1e18)).toString()} TCENT (gross: ${(BigInt(grossPayout) / BigInt(1e18)).toString()}, fee: ${(platformFee / BigInt(1e18)).toString()})`);
         } else if (outcome === 2 && hasNoShares) {
-          // NO won - user gets NO investment back + share of YES pool
+          // NO won - user gets share of YES pool only (pari-mutuel: winners only split losing pool)
           won = true;
           shares = (noShares / BigInt(1e18)).toString();
           
-          // Calculate: Investment + (YES pool * user NO shares / total NO shares)
-          const userInvestment = userNoInvested;
+          // Calculate: (YES pool * user NO shares / total NO shares) - winners only get losing pool
           let losingPoolShare = BigInt(0);
           if (totalNoShares > 0n && yesPool > 0n) {
             losingPoolShare = (yesPool * noShares) / totalNoShares;
           }
-          grossPayout = (userInvestment + losingPoolShare).toString();
+          // Gross payout is ONLY the losing pool share (not investment + losing pool)
+          grossPayout = losingPoolShare.toString();
           
           // Apply 2% platform fee
           const platformFee = (BigInt(grossPayout) * BigInt(200)) / BigInt(10000);
