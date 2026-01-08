@@ -236,13 +236,51 @@ const PendingMarkets = () => {
       showGlassToast({ title: 'Transaction submitted. Waiting for confirmation...' });
       const receipt = await tx.wait();
 
-      // Get market ID from event
+      // Get market ID from event - try multiple methods
+      let marketId = null;
+      
+      // Method 1: Try to find parsed MarketCreated event
       const marketCreatedEvent = receipt.events?.find(e => e.event === 'MarketCreated');
-      const marketId = marketCreatedEvent?.args?.marketId?.toString();
+      if (marketCreatedEvent?.args) {
+        // Try marketId first, then id (for compatibility)
+        marketId = marketCreatedEvent.args.marketId?.toString() || marketCreatedEvent.args.id?.toString() || marketCreatedEvent.args[0]?.toString();
+      }
+      
+      // Method 2: Parse logs manually if event wasn't parsed
+      if (!marketId && receipt.logs?.length > 0) {
+        try {
+          const iface = new ethers.utils.Interface([
+            "event MarketCreated(uint256 indexed marketId, address indexed creator, string question, string category, uint256 endTime)"
+          ]);
+          for (const log of receipt.logs) {
+            try {
+              const parsed = iface.parseLog(log);
+              if (parsed.name === 'MarketCreated') {
+                marketId = parsed.args.marketId?.toString() || parsed.args[0]?.toString();
+                console.log('Parsed marketId from raw log:', marketId);
+                break;
+              }
+            } catch (parseErr) {
+              // Not a MarketCreated event, continue
+            }
+          }
+        } catch (ifaceErr) {
+          console.warn('Could not parse logs manually:', ifaceErr);
+        }
+      }
+      
+      // Method 3: Try to get from return value (some contracts return the ID)
+      if (!marketId && receipt.events?.[0]?.args?.[0]) {
+        marketId = receipt.events[0].args[0].toString();
+        console.log('Got marketId from first event arg:', marketId);
+      }
 
       if (!marketId) {
-        throw new Error('Failed to get market ID from transaction');
+        console.error('Failed to get market ID. Receipt:', JSON.stringify(receipt, null, 2));
+        throw new Error('Failed to get market ID from transaction. Check console for details.');
       }
+      
+      console.log('✅ Market created with ID:', marketId);
 
       showTransactionToast({ 
         title: 'Market created on-chain!', 
