@@ -17,6 +17,7 @@ const recordPriceHandler = require('../lib/api-handlers/record-price.js');
 const userStatsHandler = require('../lib/api-handlers/user-stats.js');
 const topHoldersHandler = require('../lib/api-handlers/top-holders.js');
 const updatePositionHandler = require('../lib/api-handlers/update-position.js');
+const clearDatabaseHandler = require('../lib/api-handlers/clear-database.js');
 
 module.exports = async (req, res) => {
   // Set CORS headers
@@ -126,6 +127,11 @@ module.exports = async (req, res) => {
         req.params.address = userStatsMatch[1];
       }
       return await userStatsHandler(req, res);
+    }
+
+    // Admin: Clear database
+    if (path === '/api/admin/clear-database') {
+      return await clearDatabaseHandler(req, res);
     }
 
     // 404 for unknown routes

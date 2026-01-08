@@ -291,27 +291,25 @@ const PendingMarkets = () => {
       // Get API base URL for saving image and updating status
       const apiBaseUrl = resolveApiBase();
 
-      // Create activity event for market creation
+      // Create activity event for market creation (non-blocking)
       // Use the original creator's address, not the admin's
-      try {
-        await fetch(`${apiBaseUrl}/api/activity/create`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'MARKET_CREATED',
-            marketId: marketId,
-            creator: pendingMarket.creator, // Use original creator, not admin
-            question: pendingMarket.question,
-            category: pendingMarket.category,
-            txHash: receipt.transactionHash,
-            blockNumber: receipt.blockNumber?.toString() || null,
-            blockTime: new Date().toISOString()
-          })
-        });
-        console.log('✅ Market created activity event recorded');
-      } catch (activityErr) {
-        console.error('⚠️ Failed to create activity event:', activityErr);
-      }
+      fetch(`${apiBaseUrl}/api/activity/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'MARKET_CREATED',
+          marketId: marketId,
+          creator: pendingMarket.creator,
+          question: pendingMarket.question,
+          category: pendingMarket.category,
+          txHash: receipt.transactionHash,
+          blockNumber: receipt.blockNumber?.toString() || null,
+          blockTime: new Date().toISOString()
+        })
+      }).then(r => {
+        if (r.ok) console.log('✅ Activity event recorded');
+        else console.warn('⚠️ Activity event failed:', r.status);
+      }).catch(err => console.warn('⚠️ Activity event error:', err.message));
 
       // Save image if exists
       if (pendingMarket.imageUrl) {

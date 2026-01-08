@@ -2,7 +2,7 @@
 // Network: Incentiv Testnet (Chain ID: 28802)
 // Contract deployed: 2026-01-08
 
-export const CONTRACT_ADDRESS = "0xcF6DF13E40a2AFfFd8992c5f9e733FE9e97C7399";
+export const CONTRACT_ADDRESS = "0xfbfe89B67CB61945324c61FC6870d12d12b2375e";
 export const CHAIN_ID = 28802;
 export const MARKET_CREATION_FEE = "0.01";
 export const PLATFORM_FEE_BPS = 200;
