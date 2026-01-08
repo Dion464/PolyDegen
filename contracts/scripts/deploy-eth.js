@@ -53,14 +53,37 @@ async function main() {
   console.log("\n📁 Deployment info saved to:", deploymentFile);
 
   // Generate frontend config
+  // Determine network-specific config
+  const networkConfig = {
+    28802: {
+      name: "Incentiv Testnet",
+      rpcUrl: "https://rpc-testnet.incentiv.io/",
+      blockExplorer: "https://testnet.incentiv.io"
+    },
+    1337: {
+      name: "Hardhat Local",
+      rpcUrl: "http://127.0.0.1:8545",
+      blockExplorer: ""
+    }
+  };
+  
+  const config = networkConfig[network.chainId] || {
+    name: network.name || "Unknown",
+    rpcUrl: process.env.RPC_URL || "",
+    blockExplorer: ""
+  };
+
   const frontendConfig = `// Auto-generated contract configuration
 // Generated at: ${new Date().toISOString()}
-// Network: ${network.name} (Chain ID: ${network.chainId})
+// Network: ${config.name} (Chain ID: ${network.chainId})
 
 export const CONTRACT_ADDRESS = "${contract.address}";
 export const CHAIN_ID = ${network.chainId};
 export const MARKET_CREATION_FEE = "${ethers.utils.formatEther(marketCreationFee)}";
 export const PLATFORM_FEE_BPS = ${platformFeeBasisPoints};
+export const RPC_URL = "${config.rpcUrl}";
+export const NETWORK_NAME = "${config.name}";
+export const BLOCK_EXPLORER_URL = "${config.blockExplorer}";
 
 export const CONTRACT_ABI = ${JSON.stringify([
   "function createMarket(string memory _question, string memory _description, string memory _category, uint256 _resolutionTime, uint256 _endTime) payable returns (uint256)",
