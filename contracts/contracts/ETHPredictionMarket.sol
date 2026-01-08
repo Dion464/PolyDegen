@@ -1124,7 +1124,6 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
 
     // Claim winnings after market resolution - PARI-MUTUEL MODEL
     // Winners get: Their investment back + Share of losing side's pool - 2% platform fee
-    // Payouts are capped at actual contract balance to prevent reverts
     function claimWinnings(uint256 _marketId) external nonReentrant {
         Market storage market = markets[_marketId];
         require(market.resolved, "Market not resolved");
@@ -1135,110 +1134,86 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         uint256 grossPayout = 0;
         uint256 userInvestment = 0;
         uint256 losingPoolShare = 0;
+        bool isWinner = false;
         
-        if (market.outcome == 1 && position.yesShares > 0) {
+        // Store position values before any modifications
+        uint256 userYesShares = position.yesShares;
+        uint256 userNoShares = position.noShares;
+        uint256 userYesInvested = position.yesInvested;
+        uint256 userNoInvested = position.noInvested;
+        
+        if (market.outcome == 1 && userYesShares > 0) {
             // YES won - get investment back + split losing pool by SHARE percentage
             require(market.totalYesShares > 0, "No winning shares");
+            isWinner = true;
             
             // User's actual TCENT investment (what they get back)
-            userInvestment = position.yesInvested;
+            userInvestment = userYesInvested;
             
             // Calculate percentage of losing pool based on SHARES (not TCENT)
-            // losingPoolShare = (losingPool * userShares) / totalWinningShares
             if (market.totalYesShares > 0 && market.noPool > 0) {
-                losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
+                losingPoolShare = (market.noPool * userYesShares) / market.totalYesShares;
             }
             
             grossPayout = userInvestment + losingPoolShare;
-            position.yesShares = 0;
-            position.yesInvested = 0;
-            // Also clear any NO shares (they lost)
-            position.noShares = 0;
-            position.noInvested = 0;
-        } else if (market.outcome == 2 && position.noShares > 0) {
+        } else if (market.outcome == 2 && userNoShares > 0) {
             // NO won - get investment back + split losing pool by SHARE percentage
             require(market.totalNoShares > 0, "No winning shares");
+            isWinner = true;
             
             // User's actual TCENT investment (what they get back)
-            userInvestment = position.noInvested;
+            userInvestment = userNoInvested;
             
             // Calculate percentage of losing pool based on SHARES (not TCENT)
-            // losingPoolShare = (losingPool * userShares) / totalWinningShares
             if (market.totalNoShares > 0 && market.yesPool > 0) {
-                losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
+                losingPoolShare = (market.yesPool * userNoShares) / market.totalNoShares;
             }
             
             grossPayout = userInvestment + losingPoolShare;
-            position.noShares = 0;
-            position.noInvested = 0;
-            // Also clear any YES shares (they lost)
-            position.yesShares = 0;
-            position.yesInvested = 0;
         } else if (market.outcome == 3) {
             // INVALID - refund proportionally based on total invested
-            uint256 totalShares = position.yesShares + position.noShares;
+            uint256 totalShares = userYesShares + userNoShares;
             uint256 totalMarketShares = market.totalYesShares + market.totalNoShares;
             if (totalShares > 0 && totalMarketShares > 0) {
-                // Refund based on share proportion of total pool
                 grossPayout = (market.totalPool * totalShares) / totalMarketShares;
             }
-            position.yesShares = 0;
-            position.noShares = 0;
-            position.yesInvested = 0;
-            position.noInvested = 0;
-        } else {
-            // User only has losing shares - no payout
-            // Clear losing shares
-            if (market.outcome == 1 && position.noShares > 0) {
-                position.noShares = 0;
-                position.noInvested = 0; // NO shares lost - forfeited
-            } else if (market.outcome == 2 && position.yesShares > 0) {
-                position.yesShares = 0;
-                position.yesInvested = 0; // YES shares lost - forfeited
-            }
-            // Payout remains 0 for losers
+            isWinner = grossPayout > 0;
         }
+        // If none of above, user only has losing shares - no payout, just clear position
 
         // Calculate platform fee (2% of gross payout)
         uint256 platformFee = 0;
         uint256 netPayout = 0;
         
         if (grossPayout > 0) {
-            // Platform fee = 2% of gross payout
             platformFee = (grossPayout * platformFeePercent) / 10000;
             netPayout = grossPayout - platformFee;
             
-            // Get actual contract balance
-            uint256 contractBalance = address(this).balance;
+            // Require contract has enough balance to pay
+            require(address(this).balance >= (platformFee + netPayout), "Insufficient contract balance for payout");
             
-            // If contract doesn't have enough, scale payout to what's available
-            // This prevents reverts when ETH has left via trades
-            if (contractBalance < (platformFee + netPayout)) {
-                // Not enough balance - pay proportionally from available
-                uint256 totalNeeded = platformFee + netPayout;
-                if (contractBalance > 0 && totalNeeded > 0) {
-                    // Scale both platform fee and net payout proportionally
-                    platformFee = (platformFee * contractBalance) / totalNeeded;
-                    netPayout = contractBalance - platformFee;
-                } else {
-                    // No balance at all
-                    platformFee = 0;
-                    netPayout = 0;
-                }
-            }
+            // Clear position FIRST (before external calls to prevent reentrancy)
+            position.yesShares = 0;
+            position.noShares = 0;
+            position.yesInvested = 0;
+            position.noInvested = 0;
             
-            // Send platform fee to fee recipient (only if we have balance)
-            if (platformFee > 0 && feeRecipient != address(0) && address(this).balance >= platformFee) {
+            // Send platform fee to fee recipient
+            if (platformFee > 0 && feeRecipient != address(0)) {
                 payable(feeRecipient).transfer(platformFee);
             }
             
-            // Pay user their net payout (only if we have balance)
-            if (netPayout > 0 && address(this).balance >= netPayout) {
+            // Pay user their net payout
+            if (netPayout > 0) {
                 payable(msg.sender).transfer(netPayout);
             }
+        } else {
+            // User lost or no payout - just clear position
+            position.yesShares = 0;
+            position.noShares = 0;
+            position.yesInvested = 0;
+            position.noInvested = 0;
         }
-        // Note: Position is cleared even if payout is 0 (user lost or insufficient balance)
-        // This allows users to clear their losing position from the UI
     }
 
 

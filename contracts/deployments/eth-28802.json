@@ -2,9 +2,9 @@
   "network": "unknown",
   "chainId": 28802,
   "deployer": "0xed27C34A8434ADc188A2D7503152024F64967B61",
-  "timestamp": "2026-01-08T09:33:32.016Z",
+  "timestamp": "2026-01-08T13:18:33.839Z",
   "contracts": {
-    "ETHPredictionMarket": "0x1391b2B2eBDF166480b964c16c51c9B0DEe96404"
+    "ETHPredictionMarket": "0x3475891ea074200d29eAE5d502c9A18C473e1e17"
   },
   "config": {
     "marketCreationFee": "10000000000000000",
