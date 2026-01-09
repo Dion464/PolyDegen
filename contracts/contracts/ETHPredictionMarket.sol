@@ -1024,30 +1024,34 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             uint256 grossPayout = 0;
             
             if (market.outcome == 1 && position.yesShares > 0) {
-                // YES won - winners split the TOTAL pool proportionally (pari-mutuel)
+                // YES won - INVESTMENT-FIRST payout:
+                // 1. Return user's investment first
+                // 2. Split the losing pool (NO pool) by shares
                 require(market.totalYesShares > 0, "No winning shares");
                 
-                // Calculate share of TOTAL pool (yesPool + noPool) based on SHARES
-                // This ensures winners get their stake back + losers' stakes
-                uint256 totalPool = market.yesPool + market.noPool;
-                if (market.totalYesShares > 0 && totalPool > 0) {
-                    grossPayout = (totalPool * position.yesShares) / market.totalYesShares;
+                uint256 userInvestment = position.yesInvested;
+                uint256 losingPoolShare = 0;
+                if (market.totalYesShares > 0 && market.noPool > 0) {
+                    losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
                 }
+                grossPayout = userInvestment + losingPoolShare;
                 
                 position.yesShares = 0;
                 position.yesInvested = 0;
                 position.noShares = 0;
                 position.noInvested = 0;
             } else if (market.outcome == 2 && position.noShares > 0) {
-                // NO won - winners split the TOTAL pool proportionally (pari-mutuel)
+                // NO won - INVESTMENT-FIRST payout:
+                // 1. Return user's investment first
+                // 2. Split the losing pool (YES pool) by shares
                 require(market.totalNoShares > 0, "No winning shares");
                 
-                // Calculate share of TOTAL pool (yesPool + noPool) based on SHARES
-                // This ensures winners get their stake back + losers' stakes
-                uint256 totalPool = market.yesPool + market.noPool;
-                if (market.totalNoShares > 0 && totalPool > 0) {
-                    grossPayout = (totalPool * position.noShares) / market.totalNoShares;
+                uint256 userInvestment = position.noInvested;
+                uint256 losingPoolShare = 0;
+                if (market.totalNoShares > 0 && market.yesPool > 0) {
+                    losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
                 }
+                grossPayout = userInvestment + losingPoolShare;
                 
                 position.noShares = 0;
                 position.noInvested = 0;
@@ -1134,27 +1138,41 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         uint256 userNoShares = position.noShares;
         
         if (market.outcome == 1 && userYesShares > 0) {
-            // YES won - winners split the TOTAL pool proportionally (pari-mutuel)
+            // YES won - INVESTMENT-FIRST payout system:
+            // 1. Return user's original investment first
+            // 2. Split the losing pool (NO pool) by shares
             require(market.totalYesShares > 0, "No winning shares");
             isWinner = true;
             
-            // Calculate share of TOTAL pool (yesPool + noPool) based on SHARES
-            // This ensures winners get their stake back + losers' stakes
-            uint256 totalPool = market.yesPool + market.noPool;
-            if (market.totalYesShares > 0 && totalPool > 0) {
-                grossPayout = (totalPool * userYesShares) / market.totalYesShares;
+            // User's investment is returned first
+            uint256 userInvestment = position.yesInvested;
+            
+            // Then split the losing pool by share percentage
+            uint256 losingPoolShare = 0;
+            if (market.totalYesShares > 0 && market.noPool > 0) {
+                losingPoolShare = (market.noPool * userYesShares) / market.totalYesShares;
             }
+            
+            // Total payout = investment back + share of losers' pool
+            grossPayout = userInvestment + losingPoolShare;
         } else if (market.outcome == 2 && userNoShares > 0) {
-            // NO won - winners split the TOTAL pool proportionally (pari-mutuel)
+            // NO won - INVESTMENT-FIRST payout system:
+            // 1. Return user's original investment first
+            // 2. Split the losing pool (YES pool) by shares
             require(market.totalNoShares > 0, "No winning shares");
             isWinner = true;
             
-            // Calculate share of TOTAL pool (yesPool + noPool) based on SHARES
-            // This ensures winners get their stake back + losers' stakes
-            uint256 totalPool = market.yesPool + market.noPool;
-            if (market.totalNoShares > 0 && totalPool > 0) {
-                grossPayout = (totalPool * userNoShares) / market.totalNoShares;
+            // User's investment is returned first
+            uint256 userInvestment = position.noInvested;
+            
+            // Then split the losing pool by share percentage
+            uint256 losingPoolShare = 0;
+            if (market.totalNoShares > 0 && market.yesPool > 0) {
+                losingPoolShare = (market.yesPool * userNoShares) / market.totalNoShares;
             }
+            
+            // Total payout = investment back + share of losers' pool
+            grossPayout = userInvestment + losingPoolShare;
         } else if (market.outcome == 3) {
             // INVALID - refund proportionally based on total invested
             uint256 totalShares = userYesShares + userNoShares;

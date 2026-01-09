@@ -318,37 +318,43 @@ const AdminResolution = () => {
         let netPayout = '0';   // After 2% platform fee
         
         if (outcome === 1 && hasYesShares) {
-          // YES won - winners split the TOTAL pool proportionally (pari-mutuel)
+          // YES won - INVESTMENT-FIRST payout:
+          // 1. Return user's investment first
+          // 2. Split the losing pool (NO pool) by shares
           won = true;
           shares = (yesShares / BigInt(1e18)).toString();
           
-          // Calculate: TOTAL pool * user YES shares / total YES shares
-          // This ensures winners get their stake back + losers' stakes
-          if (totalYesShares > 0n && totalPool > 0n) {
-            grossPayout = ((totalPool * yesShares) / totalYesShares).toString();
+          // Calculate: investment + (NO pool * user YES shares / total YES shares)
+          let losingPoolShare = BigInt(0);
+          if (totalYesShares > 0n && noPool > 0n) {
+            losingPoolShare = (noPool * yesShares) / totalYesShares;
           }
+          grossPayout = (userYesInvested + losingPoolShare).toString();
           
           // Apply 2% platform fee
           const platformFee = (BigInt(grossPayout) * BigInt(200)) / BigInt(10000);
           netPayout = (BigInt(grossPayout) - platformFee).toString();
           
-          console.log(`✅ ${participant.userAddress} WON with ${shares} YES shares = ${(BigInt(netPayout) / BigInt(1e18)).toString()} TCENT (gross: ${(BigInt(grossPayout) / BigInt(1e18)).toString()}, fee: ${(platformFee / BigInt(1e18)).toString()})`);
+          console.log(`✅ ${participant.userAddress} WON with ${shares} YES shares = ${(BigInt(netPayout) / BigInt(1e18)).toString()} TCENT (investment: ${(userYesInvested / BigInt(1e18)).toString()}, losingShare: ${(losingPoolShare / BigInt(1e18)).toString()})`);
         } else if (outcome === 2 && hasNoShares) {
-          // NO won - winners split the TOTAL pool proportionally (pari-mutuel)
+          // NO won - INVESTMENT-FIRST payout:
+          // 1. Return user's investment first
+          // 2. Split the losing pool (YES pool) by shares
           won = true;
           shares = (noShares / BigInt(1e18)).toString();
           
-          // Calculate: TOTAL pool * user NO shares / total NO shares
-          // This ensures winners get their stake back + losers' stakes
-          if (totalNoShares > 0n && totalPool > 0n) {
-            grossPayout = ((totalPool * noShares) / totalNoShares).toString();
+          // Calculate: investment + (YES pool * user NO shares / total NO shares)
+          let losingPoolShare = BigInt(0);
+          if (totalNoShares > 0n && yesPool > 0n) {
+            losingPoolShare = (yesPool * noShares) / totalNoShares;
           }
+          grossPayout = (userNoInvested + losingPoolShare).toString();
           
           // Apply 2% platform fee
           const platformFee = (BigInt(grossPayout) * BigInt(200)) / BigInt(10000);
           netPayout = (BigInt(grossPayout) - platformFee).toString();
           
-          console.log(`✅ ${participant.userAddress} WON with ${shares} NO shares = ${(BigInt(netPayout) / BigInt(1e18)).toString()} TCENT (gross: ${(BigInt(grossPayout) / BigInt(1e18)).toString()}, fee: ${(platformFee / BigInt(1e18)).toString()})`);
+          console.log(`✅ ${participant.userAddress} WON with ${shares} NO shares = ${(BigInt(netPayout) / BigInt(1e18)).toString()} TCENT (investment: ${(userNoInvested / BigInt(1e18)).toString()}, losingShare: ${(losingPoolShare / BigInt(1e18)).toString()})`);
         } else if (outcome === 1 && hasNoShares) {
           // YES won but user has NO shares - lost
           won = false;
