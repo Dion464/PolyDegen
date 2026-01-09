@@ -1022,36 +1022,33 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
             }
             
             uint256 grossPayout = 0;
-            uint256 losingPoolShare = 0;
             
             if (market.outcome == 1 && position.yesShares > 0) {
-                // YES won - split losing pool by SHARE percentage (pari-mutuel: winners only get losing pool)
+                // YES won - winners split the TOTAL pool proportionally (pari-mutuel)
                 require(market.totalYesShares > 0, "No winning shares");
                 
-                // Calculate percentage of losing pool based on SHARES (not TCENT)
-                // Winners only split the losing pool - their investment stays in winning pool
-                if (market.totalYesShares > 0 && market.noPool > 0) {
-                    losingPoolShare = (market.noPool * position.yesShares) / market.totalYesShares;
+                // Calculate share of TOTAL pool (yesPool + noPool) based on SHARES
+                // This ensures winners get their stake back + losers' stakes
+                uint256 totalPool = market.yesPool + market.noPool;
+                if (market.totalYesShares > 0 && totalPool > 0) {
+                    grossPayout = (totalPool * position.yesShares) / market.totalYesShares;
                 }
                 
-                // Gross payout is ONLY the losing pool share (not investment + losing pool)
-                grossPayout = losingPoolShare;
                 position.yesShares = 0;
                 position.yesInvested = 0;
                 position.noShares = 0;
                 position.noInvested = 0;
             } else if (market.outcome == 2 && position.noShares > 0) {
-                // NO won - split losing pool by SHARE percentage (pari-mutuel: winners only get losing pool)
+                // NO won - winners split the TOTAL pool proportionally (pari-mutuel)
                 require(market.totalNoShares > 0, "No winning shares");
                 
-                // Calculate percentage of losing pool based on SHARES (not TCENT)
-                // Winners only split the losing pool - their investment stays in winning pool
-                if (market.totalNoShares > 0 && market.yesPool > 0) {
-                    losingPoolShare = (market.yesPool * position.noShares) / market.totalNoShares;
+                // Calculate share of TOTAL pool (yesPool + noPool) based on SHARES
+                // This ensures winners get their stake back + losers' stakes
+                uint256 totalPool = market.yesPool + market.noPool;
+                if (market.totalNoShares > 0 && totalPool > 0) {
+                    grossPayout = (totalPool * position.noShares) / market.totalNoShares;
                 }
                 
-                // Gross payout is ONLY the losing pool share (not investment + losing pool)
-                grossPayout = losingPoolShare;
                 position.noShares = 0;
                 position.noInvested = 0;
                 position.yesShares = 0;
@@ -1130,7 +1127,6 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         require(position.yesShares > 0 || position.noShares > 0, "No position in market");
 
         uint256 grossPayout = 0;
-        uint256 losingPoolShare = 0;
         bool isWinner = false;
         
         // Store position values before any modifications
@@ -1138,31 +1134,27 @@ contract ETHPredictionMarket is ReentrancyGuard, Ownable {
         uint256 userNoShares = position.noShares;
         
         if (market.outcome == 1 && userYesShares > 0) {
-            // YES won - split losing pool by SHARE percentage (pari-mutuel: winners only get losing pool)
+            // YES won - winners split the TOTAL pool proportionally (pari-mutuel)
             require(market.totalYesShares > 0, "No winning shares");
             isWinner = true;
             
-            // Calculate percentage of losing pool based on SHARES (not TCENT)
-            // Winners only split the losing pool - their investment stays in winning pool
-            if (market.totalYesShares > 0 && market.noPool > 0) {
-                losingPoolShare = (market.noPool * userYesShares) / market.totalYesShares;
+            // Calculate share of TOTAL pool (yesPool + noPool) based on SHARES
+            // This ensures winners get their stake back + losers' stakes
+            uint256 totalPool = market.yesPool + market.noPool;
+            if (market.totalYesShares > 0 && totalPool > 0) {
+                grossPayout = (totalPool * userYesShares) / market.totalYesShares;
             }
-            
-            // Gross payout is ONLY the losing pool share (not investment + losing pool)
-            grossPayout = losingPoolShare;
         } else if (market.outcome == 2 && userNoShares > 0) {
-            // NO won - split losing pool by SHARE percentage (pari-mutuel: winners only get losing pool)
+            // NO won - winners split the TOTAL pool proportionally (pari-mutuel)
             require(market.totalNoShares > 0, "No winning shares");
             isWinner = true;
             
-            // Calculate percentage of losing pool based on SHARES (not TCENT)
-            // Winners only split the losing pool - their investment stays in winning pool
-            if (market.totalNoShares > 0 && market.yesPool > 0) {
-                losingPoolShare = (market.yesPool * userNoShares) / market.totalNoShares;
+            // Calculate share of TOTAL pool (yesPool + noPool) based on SHARES
+            // This ensures winners get their stake back + losers' stakes
+            uint256 totalPool = market.yesPool + market.noPool;
+            if (market.totalNoShares > 0 && totalPool > 0) {
+                grossPayout = (totalPool * userNoShares) / market.totalNoShares;
             }
-            
-            // Gross payout is ONLY the losing pool share (not investment + losing pool)
-            grossPayout = losingPoolShare;
         } else if (market.outcome == 3) {
             // INVALID - refund proportionally based on total invested
             uint256 totalShares = userYesShares + userNoShares;
