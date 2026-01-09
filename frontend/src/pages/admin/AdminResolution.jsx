@@ -157,10 +157,13 @@ const AdminResolution = () => {
         console.error('Failed to fetch participants from database:', err);
       }
 
-      // Fallback: Query positions directly from blockchain if database has no participants
-      if (participants.length === 0 && contracts?.predictionMarket) {
+      // ALWAYS query blockchain for participants to ensure we find everyone
+      // Even if database has some, we want to merge with blockchain data
+      const blockchainParticipants = new Map(); // address -> {yesShares, noShares, yesInvested, noInvested}
+      
+      if (contracts?.predictionMarket) {
         try {
-          console.log('⚠️ No participants in database, querying blockchain events...');
+          console.log('📡 Querying blockchain for all market participants...');
           
           // Get provider from contract
           const provider = contracts.predictionMarket.provider || 
@@ -173,15 +176,19 @@ const AdminResolution = () => {
             // Get all SharePurchased and SharesSold events for this market
             const contract = contracts.predictionMarket;
             const currentBlock = await provider.getBlockNumber();
-            const fromBlock = Math.max(0, currentBlock - 50000); // Last ~50k blocks
+            const fromBlock = Math.max(0, currentBlock - 100000); // Last ~100k blocks (more range)
+
+            console.log(`Querying events from block ${fromBlock} to ${currentBlock}`);
 
             // Query all purchase events
             const purchaseFilter = contract.filters.SharesPurchased(marketId, null);
             const purchaseEvents = await contract.queryFilter(purchaseFilter, fromBlock);
+            console.log(`Found ${purchaseEvents.length} purchase events`);
 
             // Query all sell events
             const sellFilter = contract.filters.SharesSold(marketId, null);
             const sellEvents = await contract.queryFilter(sellFilter, fromBlock);
+            console.log(`Found ${sellEvents.length} sell events`);
 
             // Collect all unique trader addresses
             const traderSet = new Set();
@@ -229,22 +236,27 @@ const AdminResolution = () => {
               }
             }
 
-            // Get current positions from contract for all traders (more accurate)
+            // Get current positions from contract for ALL traders found in events
             const allTraders = Array.from(traderSet);
-            console.log(`Found ${allTraders.length} unique traders from events, fetching current positions...`);
+            console.log(`Found ${allTraders.length} unique traders from events: ${allTraders.join(', ')}`);
             
             for (const traderAddress of allTraders) {
               try {
                 const position = await contracts.predictionMarket.getUserPosition(marketId, traderAddress);
                 const yesShares = position.yesShares?.toString() || '0';
                 const noShares = position.noShares?.toString() || '0';
+                const yesInvested = position.yesInvested?.toString() || '0';
+                const noInvested = position.noInvested?.toString() || '0';
                 
-                // Only include if they still have shares
+                console.log(`Position for ${traderAddress}: YES=${yesShares}, NO=${noShares}, yesInv=${yesInvested}, noInv=${noInvested}`);
+                
+                // Include ALL traders who still have shares
                 if (BigInt(yesShares) > 0n || BigInt(noShares) > 0n) {
-                  participants.push({
-                    userAddress: traderAddress.toLowerCase(),
-                    yesShares: yesShares,
-                    noShares: noShares
+                  blockchainParticipants.set(traderAddress.toLowerCase(), {
+                    yesShares,
+                    noShares,
+                    yesInvested,
+                    noInvested
                   });
                 }
               } catch (posErr) {
@@ -252,22 +264,46 @@ const AdminResolution = () => {
                 // Fall back to event-based calculation
                 const eventPos = traderPositions.get(traderAddress);
                 if (eventPos && (BigInt(eventPos.yesShares) > 0n || BigInt(eventPos.noShares) > 0n)) {
-                  participants.push({
-                    userAddress: traderAddress.toLowerCase(),
+                  blockchainParticipants.set(traderAddress.toLowerCase(), {
                     yesShares: eventPos.yesShares,
-                    noShares: eventPos.noShares
+                    noShares: eventPos.noShares,
+                    yesInvested: '0',
+                    noInvested: '0'
                   });
                 }
               }
             }
 
-            console.log(`✅ Found ${participants.length} participants from blockchain`);
+            console.log(`✅ Found ${blockchainParticipants.size} participants from blockchain`);
           }
         } catch (blockchainErr) {
           console.error('Failed to fetch participants from blockchain:', blockchainErr);
-          // Continue with empty participants array - notifications will just not be sent
         }
       }
+      
+      // Merge database participants with blockchain participants
+      // Blockchain is source of truth for shares and investment
+      const mergedParticipants = new Map();
+      
+      // Add database participants first
+      for (const p of participants) {
+        mergedParticipants.set(p.userAddress.toLowerCase(), p);
+      }
+      
+      // Merge/override with blockchain data (more accurate)
+      for (const [addr, pos] of blockchainParticipants) {
+        mergedParticipants.set(addr, {
+          userAddress: addr,
+          yesShares: pos.yesShares,
+          noShares: pos.noShares,
+          yesInvested: pos.yesInvested,
+          noInvested: pos.noInvested
+        });
+      }
+      
+      // Convert back to array
+      participants = Array.from(mergedParticipants.values());
+      console.log(`📊 Total merged participants: ${participants.length}`);
 
       // Get market data to access pools for pari-mutuel calculations
       const marketData = await getMarketData(marketId);
@@ -296,21 +332,10 @@ const AdminResolution = () => {
           continue; // Skip if no shares
         }
 
-        // Get user's position to find their investment
-        let userYesInvested = BigInt(0);
-        let userNoInvested = BigInt(0);
-        try {
-          const position = await contracts.predictionMarket.getUserPosition(marketId, participant.userAddress);
-          // getUserPosition returns (yesShares, noShares, totalInvested, yesInvested, noInvested)
-          userYesInvested = BigInt(position.yesInvested?.toString() || '0');
-          userNoInvested = BigInt(position.noInvested?.toString() || '0');
-          console.log(`Position for ${participant.userAddress}: yesInvested=${userYesInvested}, noInvested=${userNoInvested}`);
-        } catch (err) {
-          console.warn(`Could not get position for ${participant.userAddress}, using participant data`);
-          // Fallback: use participant data if available, otherwise use shares as rough estimate
-          userYesInvested = BigInt(participant.yesInvested || '0');
-          userNoInvested = BigInt(participant.noInvested || '0');
-        }
+        // Get user's investment data (already fetched from blockchain)
+        const userYesInvested = BigInt(participant.yesInvested || '0');
+        const userNoInvested = BigInt(participant.noInvested || '0');
+        console.log(`Investment for ${participant.userAddress}: yesInvested=${userYesInvested}, noInvested=${userNoInvested}`);
 
         let won = false;
         let shares = '0';
