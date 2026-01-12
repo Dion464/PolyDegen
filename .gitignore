@@ -1,27 +1,40 @@
-# Node modules
-**/node_modules
-
-# Hardhat artifacts
-contracts/artifacts
-contracts/cache
+# Dependencies
+node_modules/
 
 # Build outputs
-frontend/build
-frontend/dist
+dist/
+build/
+.next/
 
-
-
-
-# Environment variables (never commit!)
+# Environment files
 .env
-.env.local
-.env.production
-frontend/.env
-frontend/.env.local
-frontend/.env.production
-*.env
-.env.example
-frontend/.env.example
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel/
 
 # Logs
 *.log
+npm-debug.log*
+
+# Test
+coverage/
+
+# Cache
+.cache/
+*.tsbuildinfo
+
+# Misc
+mdp.txt
+*.backup
