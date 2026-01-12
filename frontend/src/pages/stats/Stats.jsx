@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { API_URL } from '../../config';
+import { API_BASE_URL } from '../../lib/api';
 import SiteButton from '../../components/buttons/SiteButtons';
 import LoadingSpinner from '../../components/loaders/LoadingSpinner';
 import SiteTabs from '../../components/tabs/SiteTabs';
@@ -76,7 +76,7 @@ const Stats = () => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch(`${API_URL}/v0/stats`, {
+        const response = await fetch(`${API_BASE_URL}/v0/stats`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -103,7 +103,7 @@ const Stats = () => {
     setMetricsLoading(true);
     setMetricsError(null);
     try {
-      const response = await fetch(`${API_URL}/v0/system/metrics`, {
+      const response = await fetch(`${API_BASE_URL}/v0/system/metrics`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -127,7 +127,7 @@ const Stats = () => {
     setLeaderboardLoading(true);
     setLeaderboardError(null);
     try {
-      const response = await fetch(`${API_URL}/v0/global/leaderboard`, {
+      const response = await fetch(`${API_BASE_URL}/v0/global/leaderboard`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

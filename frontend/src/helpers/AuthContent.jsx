@@ -1,5 +1,5 @@
-import { API_URL } from './../config';
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { API_BASE_URL } from '../lib/api';
 
 const AuthContext = createContext({
     username: null,
@@ -47,7 +47,7 @@ const AuthProvider = ({ children }) => {
 
     const login = async (username, password) => {
         try {
-            const response = await fetch(`${API_URL}/v0/login`, {
+            const response = await fetch(`${API_BASE_URL}/v0/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
