@@ -2,7 +2,7 @@
  * Utility functions for currency display based on network
  */
 
-import { CHAIN_ID } from '../contracts/config';
+import { CHAIN_ID } from '../contracts/eth-config';
 
 /**
  * Get the currency symbol for the current network

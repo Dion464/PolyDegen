@@ -145,7 +145,7 @@ const PolymarketStyleTrading = () => {
     }
     return '';
   };
-  // Use current origin for API calls if VITE_API_BASE_URL is not set
+  
   const API_BASE = resolveApiBase();
   const [market, setMarket] = useState(null);
   const [loading, setLoading] = useState(true);
