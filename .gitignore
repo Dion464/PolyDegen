@@ -5,6 +5,8 @@ node_modules/
 dist/
 build/
 .next/
+artifacts/
+cache/
 
 # Environment files
 .env
