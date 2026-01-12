@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import '../../pages/market/MarketDetailGlass.css';
 
 const HowItWorksModal = ({ isOpen, onClose }) => {
   const [currentStep, setCurrentStep] = useState(0);

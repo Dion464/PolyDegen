@@ -5,7 +5,6 @@ import { useAuth } from '../../helpers/AuthContent';
 import { getCurrencySymbol } from '../../utils/currency';
 import toast from 'react-hot-toast';
 import { showTransactionToast, showGlassToast } from '../../utils/toastUtils.jsx';
-import '../market/MarketDetailGlass.css';
 
 const MarketCreation = () => {
   const history = useHistory();

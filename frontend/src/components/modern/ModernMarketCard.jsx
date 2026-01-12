@@ -3,7 +3,6 @@ import { useHistory } from 'react-router-dom';
 import { useWeb3 } from '../../hooks/useWeb3';
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
-import '../../pages/market/MarketDetailGlass.css';
 
 // API base URL resolution
 const resolveApiBase = () => {

@@ -9,7 +9,6 @@ import ModernMarketCard from '../../components/modern/ModernMarketCard';
 import HowItWorksModal from '../../components/modal/HowItWorksModal';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, RPC_URL } from '../../contracts/eth-config';
 import { useWebSocket, useLiveMarkets } from '../../contexts/WebSocketContext';
-import '../market/MarketDetailGlass.css';
 
 // GPU-accelerated skeleton shimmer style (uses transform/opacity for compositing)
 const skeletonShimmerStyle = {

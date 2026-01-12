@@ -6,7 +6,6 @@ import { AuthProvider } from './helpers/AuthContent';
 import { Web3Provider } from './hooks/useWeb3';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import AppRoutes from './helpers/AppRoutes';
-import '../index.css';
 
 function ErrorFallback({ error, resetErrorBoundary }) {
   return (

@@ -16,7 +16,6 @@ import { useWeb3 } from '../../hooks/useWeb3';
 import { getCurrencySymbol } from '../../utils/currency';
 import { CONTRACT_ADDRESS, CONTRACT_ABI, RPC_URL, BLOCK_EXPLORER_URL } from '../../contracts/eth-config';
 import { ethers } from 'ethers';
-import './MarketDetailGlass.css'; // Import glassmorphism styles
 import { useWebSocket, useLiveMarketData, useLivePrices, useLiveTopHolders, useLivePosition } from '../../contexts/WebSocketContext';
 
 const SkeletonBlock = ({ className = '', style = {} }) => (

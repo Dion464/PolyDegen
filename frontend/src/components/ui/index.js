@@ -24,3 +24,6 @@ export { Modal, ConfirmModal } from './Modal';
 // Images
 export { LazyImage, MarketImage } from './Image';
 
+// Navigation
+export { Tabs } from './Tabs';
+

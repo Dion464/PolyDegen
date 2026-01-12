@@ -8,7 +8,6 @@ import {
   ResponsiveContainer,
   ReferenceLine
 } from 'recharts';
-import '../../pages/market/MarketDetailGlass.css';
 
 const DEFAULT_RANGES = [
   { label: '1H', value: '1h' },

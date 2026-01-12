@@ -12,7 +12,6 @@ import {
   centsToTicks,
   ticksToCents
 } from '../../utils/eip712';
-import '../../pages/market/MarketDetailGlass.css';
 
 const INCENTIV_EXCHANGE_ADDRESS = '0x8cF17Ff1Abe81B5c74f78edb62b0AeF31936642C';
 const EXCHANGE_CONTRACT = import.meta.env.VITE_EXCHANGE_CONTRACT_ADDRESS || INCENTIV_EXCHANGE_ADDRESS;

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../../lib/api';
-import SiteButton from '../../components/buttons/SiteButtons';
-import LoadingSpinner from '../../components/loaders/LoadingSpinner';
-import SiteTabs from '../../components/tabs/SiteTabs';
+import { Button } from '../../components/ui/Button';
+import { Tabs } from '../../components/ui/Tabs';
 
 // MetricCard Component
 const MetricCard = ({
@@ -235,14 +234,14 @@ const Stats = () => {
         <h2 className="text-2xl font-semibold text-white">
           System Financial Metrics <span className="text-warning-orange text-lg">(Beta)</span>
         </h2>
-        <SiteButton
+        <Button
           onClick={fetchSystemMetrics}
-          isSelected={false}
           disabled={metricsLoading}
-          className="bg-info-blue hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
+          loading={metricsLoading}
+          variant="secondary"
         >
           {metricsLoading ? 'Calculating...' : 'Calculate Metrics'}
-        </SiteButton>
+        </Button>
       </div>
 
       {/* Beta Disclaimer */}
@@ -262,7 +261,7 @@ const Stats = () => {
 
       {metricsLoading && (
         <div className="flex justify-center items-center py-8">
-          <LoadingSpinner />
+          <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
           <span className="ml-3 text-gray-300">Computing system metrics...</span>
         </div>
       )}
@@ -409,14 +408,15 @@ const Stats = () => {
         <h2 className="text-2xl font-semibold text-white">
           Global Leaderboard <span className="text-warning-orange text-lg">(Beta)</span>
         </h2>
-        <SiteButton
+        <Button
           onClick={fetchGlobalLeaderboard}
-          isSelected={false}
           disabled={leaderboardLoading}
-          className="bg-info-blue hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors w-full sm:w-auto"
+          loading={leaderboardLoading}
+          variant="secondary"
+          className="w-full sm:w-auto"
         >
           {leaderboardLoading ? 'Calculating...' : 'Calculate Leaderboard'}
-        </SiteButton>
+        </Button>
       </div>
 
       {/* Beta Disclaimer */}
@@ -435,7 +435,7 @@ const Stats = () => {
 
       {leaderboardLoading && (
         <div className="flex justify-center items-center py-8">
-          <LoadingSpinner />
+          <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
           <span className="ml-3 text-gray-300">Computing global leaderboard...</span>
         </div>
       )}
@@ -550,7 +550,7 @@ const Stats = () => {
         </p>
       </div>
 
-      <SiteTabs tabs={tabs} defaultTab="Global Leaderboard (Beta)" />
+      <Tabs tabs={tabs} defaultTab="Global Leaderboard (Beta)" />
     </div>
   );
 };
