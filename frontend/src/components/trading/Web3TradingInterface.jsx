@@ -1214,7 +1214,7 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
               >
                 <input
                   type="text"
-                  value={limitPrice || '0.00'}
+                  value={limitPrice}
                   onChange={(e) => setLimitPrice(e.target.value)}
                   placeholder="0.00"
                   className="flex-1 bg-transparent outline-none"
@@ -1325,7 +1325,7 @@ const Web3TradingInterface = ({ marketId, market, onTradeComplete }) => {
             <div className="flex items-center justify-between gap-3">
               <input
                 type="text"
-                value={tradeAmount || '0'}
+                value={tradeAmount}
                 onChange={(e) => setTradeAmount(e.target.value)}
                 placeholder="0"
                 className="bg-transparent outline-none flex-1 min-w-0"

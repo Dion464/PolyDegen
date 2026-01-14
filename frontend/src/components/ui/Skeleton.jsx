@@ -77,3 +77,4 @@ export const SkeletonMarketCard = () => (
 
 export default Skeleton;
 
+
